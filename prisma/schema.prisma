@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Settings {
+  id          Int    @id @default(1)
+  activeMatch String @default("")
+  quarter     Int    @default(1)
+  editorPIN   String @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      String   @default("viewer") // viewer | editor
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  playerId  String   @unique @map("player_id")
+  number    Int      @default(0)
+  name      String
+  team      String   @default("my")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events      Event[]
+  matchRoster MatchRoster[]
+
+  @@map("players")
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  matchId   String   @unique @map("match_id")
+  date      String   @default("")
+  opponent  String   @default("")
+  place     String   @default("")
+  status    String   @default("active") // active | ended
+  
+  // Scores
+  q1My      Int      @default(0) @map("q1_my")
+  q1Opp     Int      @default(0) @map("q1_opp")
+  q2My      Int      @default(0) @map("q2_my")
+  q2Opp     Int      @default(0) @map("q2_opp")
+  q3My      Int      @default(0) @map("q3_my")
+  q3Opp     Int      @default(0) @map("q3_opp")
+  q4My      Int      @default(0) @map("q4_my")
+  q4Opp     Int      @default(0) @map("q4_opp")
+  finalMy   Int      @default(0) @map("final_my")
+  finalOpp  Int      @default(0) @map("final_opp")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events      Event[]
+  matchRoster MatchRoster[]
+
+  @@map("matches")
+}
+
+model MatchRoster {
+  id        String   @id @default(cuid())
+  matchId   String   @map("match_id")
+  playerId  String   @map("player_id")
+  number    Int
+  name      String
+  team      String   @default("my")
+  createdAt DateTime @default(now())
+
+  match  Match  @relation(fields: [matchId], references: [matchId], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [playerId], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@map("match_roster")
+}
+
+model Event {
+  id         String   @id @default(cuid())
+  timestamp  DateTime @default(now())
+  matchId    String   @map("match_id")
+  quarter    Int      @default(1)
+  team       String   @default("my")
+  playerId   String   @map("player_id")
+  playerName String   @map("player_name")
+  eventType  String   @default("") @map("event_type")
+  subtype    String   @default("")
+  value      String   @default("")
+  note       String   @default("")
+  
+  // New flag system
+  phase                      String  @default("positional")
+  location                   String  @default("")
+  shotZone                   String  @default("") @map("shot_zone")
+  
+  // Goals
+  isGoalFromPlay            Int     @default(0) @map("is_goal_from_play")
+  isGoalFromCenter          Int     @default(0) @map("is_goal_from_center")
+  isGoalPutback             Int     @default(0) @map("is_goal_putback")
+  isGoal5m                  Int     @default(0) @map("is_goal_5m")
+  
+  // Assists
+  isAssist                  Int     @default(0) @map("is_assist")
+  
+  // Exclusions
+  isExclDrawn               Int     @default(0) @map("is_excl_drawn")
+  exclDrawnLocation         String  @default("") @map("excl_drawn_location")
+  isExclCommitted           Int     @default(0) @map("is_excl_committed")
+  exclCommittedLocation     String  @default("") @map("excl_committed_location")
+  
+  // Penalties
+  isPenaltyDrawn            Int     @default(0) @map("is_penalty_drawn")
+  penaltyDrawnLocation      String  @default("") @map("penalty_drawn_location")
+  isPenaltyCommitted        Int     @default(0) @map("is_penalty_committed")
+  penaltyCommittedLocation  String  @default("") @map("penalty_committed_location")
+  
+  // Turnovers
+  isTurnover                Int     @default(0) @map("is_turnover")
+  isTurnover1v1             Int     @default(0) @map("is_turnover_1v1")
+  
+  // Shots
+  isShotSavedGk             Int     @default(0) @map("is_shot_saved_gk")
+  isShotMissTurnover        Int     @default(0) @map("is_shot_miss_turnover")
+  isShotMissReset30         Int     @default(0) @map("is_shot_miss_reset30")
+  
+  // Passes
+  isBadPassTurnover         Int     @default(0) @map("is_bad_pass_turnover")
+  isBadPassNoTurnover       Int     @default(0) @map("is_bad_pass_no_turnover")
+  
+  // Clock
+  isShotClockViolation      Int     @default(0) @map("is_shot_clock_violation")
+  
+  // Defense
+  isSteal                   Int     @default(0) @map("is_steal")
+  isBlockHand               Int     @default(0) @map("is_block_hand")
+  isNoBlock                 Int     @default(0) @map("is_no_block")
+  isNoReturn                Int     @default(0) @map("is_no_return")
+  
+  // Legacy/rare flags
+  isGoalCounter             Int     @default(0) @map("is_goal_counter")
+  isShotOut                 Int     @default(0) @map("is_shot_out")
+  isBadPass2m               Int     @default(0) @map("is_bad_pass_2m")
+  isPressWin                Int     @default(0) @map("is_press_win")
+  isInterception            Int     @default(0) @map("is_interception")
+  
+  createdAt DateTime @default(now())
+
+  match  Match  @relation(fields: [matchId], references: [matchId], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [playerId], onDelete: Cascade)
+
+  @@index([matchId, quarter])
+  @@map("events")
+}
+
