@@ -13,6 +13,7 @@ export async function GET() {
         date: m.date,
         opponent: m.opponent,
         place: m.place,
+        ageCategory: m.ageCategory,
         status: m.status,
       }))
     );
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
       date: match?.date || "",
       opponent: match?.opponent || "",
       place: match?.place || "",
+      ageCategory: match?.ageCategory || "Seniorzy",
     };
 
     // Upsert match
@@ -81,6 +83,7 @@ export async function POST(request: Request) {
         date: m.date,
         opponent: m.opponent,
         place: m.place,
+        ageCategory: m.ageCategory,
         status: m.status,
       })),
       roster: rosterData.map((r) => ({

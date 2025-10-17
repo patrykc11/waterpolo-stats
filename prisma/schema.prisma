@@ -44,12 +44,13 @@ model Player {
 }
 
 model Match {
-  id        String   @id @default(cuid())
-  matchId   String   @unique @map("match_id")
-  date      String   @default("")
-  opponent  String   @default("")
-  place     String   @default("")
-  status    String   @default("active") // active | ended
+  id          String   @id @default(cuid())
+  matchId     String   @unique @map("match_id")
+  date        String   @default("")
+  opponent    String   @default("")
+  place       String   @default("")
+  ageCategory String   @default("Seniorzy") @map("age_category") // U17, U19, Seniorzy
+  status      String   @default("active") // active | ended
   
   // Scores
   q1My      Int      @default(0) @map("q1_my")

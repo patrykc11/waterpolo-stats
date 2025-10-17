@@ -42,6 +42,7 @@ export async function GET() {
           date: m.date,
           opponent: m.opponent,
           place: m.place,
+          ageCategory: m.ageCategory,
           status: m.status,
         })),
         user: { email: "", role: "editor" }, // Simplified - always editor

@@ -398,6 +398,39 @@ tfoot td {
   .stats-table th, .stats-table td { font-size: 13px; padding: 8px 9px; }
 }
 
+/* Player selection styles */
+.card.selected {
+  border-color: #4cc9f0;
+  background: rgba(76, 201, 240, 0.1);
+}
+
+.card.selected:hover {
+  border-color: #4cc9f0;
+  background: rgba(76, 201, 240, 0.15);
+}
+
+/* Danger button styles */
+.btn.danger {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: white;
+}
+
+.btn.danger:hover {
+  background: #c82333;
+  border-color: #bd2130;
+}
+
+.btn.danger:active {
+  background: #bd2130;
+  border-color: #b21f2d;
+}
+
+.btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 
 .subhead {
   margin: 8px 0 4px;

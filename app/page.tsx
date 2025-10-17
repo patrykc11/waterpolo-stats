@@ -14,6 +14,7 @@ type Match = {
   date: string
   opponent: string
   place: string
+  ageCategory: string
   status: string
 }
 
@@ -77,7 +78,7 @@ export default function Home() {
     rosterActive: [],
   })
   
-  const [mode, setMode] = useState<'score' | 'stats' | 'admin'>('score')
+  const [mode, setMode] = useState<'score' | 'stats' | 'admin' | 'players'>('score')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -92,7 +93,16 @@ export default function Home() {
     date: '',
     opponent: '',
     place: '',
+    ageCategory: 'Seniorzy',
   })
+  
+  // Player management states
+  const [playerForm, setPlayerForm] = useState({
+    number: '',
+    name: '',
+  })
+  const [playerSearch, setPlayerSearch] = useState('')
+  const [selectedRosterPlayers, setSelectedRosterPlayers] = useState<Set<string>>(new Set())
   const [quarterScorePopup, setQuarterScorePopup] = useState<{
     show: boolean
     quarter: number
@@ -392,7 +402,7 @@ export default function Home() {
         settings: { ...prev.settings!, ActiveMatch: res.matchId },
       }))
       // Reset form
-      setMatchForm({ date: '', opponent: '', place: '' })
+      setMatchForm({ date: '', opponent: '', place: '', ageCategory: 'Seniorzy' })
     } catch (e: any) {
       showToast(e.message || 'Błąd zapisu')
     } finally {
@@ -400,25 +410,94 @@ export default function Home() {
     }
   }
 
-  const copyRosterFromPrevious = async () => {
+  // Player management functions
+  const addPlayer = async () => {
+    if (!playerForm.number || !playerForm.name) {
+      showToast('Wprowadź numer i nazwisko zawodnika')
+      return
+    }
+
     setLoading(true)
     try {
-      const prev = await callApi('/api/matches/previous-roster', {
+      const newPlayer = await callApi('/api/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId: 'temp' }),
+        body: JSON.stringify({
+          number: parseInt(playerForm.number),
+          name: playerForm.name,
+          team: 'my',
+        }),
       })
-      if (!prev || !prev.length) {
-        showToast('Brak poprzedniego składu')
-      } else {
-        setRosterForm(prev.map((p: any) => ({ ...p, number: String(p.number || '') })))
-      }
+      
+      setState(prev => ({
+        ...prev,
+        players: [...prev.players, newPlayer].sort((a, b) => a.number - b.number),
+      }))
+      
+      setPlayerForm({ number: '', name: '' })
+      showToast('Dodano zawodnika')
     } catch (e: any) {
-      showToast(e.message || 'Brak poprzedniego meczu')
+      showToast(e.message || 'Błąd dodawania zawodnika')
     } finally {
       setLoading(false)
     }
   }
+
+  const deletePlayer = async (playerId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć tego zawodnika?')) return
+
+    setLoading(true)
+    try {
+      await callApi('/api/players', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId }),
+      })
+      
+      setState(prev => ({
+        ...prev,
+        players: prev.players.filter(p => p.player_id !== playerId),
+      }))
+      
+      showToast('Usunięto zawodnika')
+    } catch (e: any) {
+      showToast(e.message || 'Błąd usuwania zawodnika')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copyRosterFromPrevious = async () => {
+    if (state.matches.length < 2) {
+      showToast('Brak poprzedniego meczu')
+      return
+    }
+
+    const previousMatch = state.matches[1] // Second match (first is current)
+    setLoading(true)
+    try {
+      const roster = await callApi(`/api/roster/${previousMatch.match_id}`)
+      
+      // Set selected players from previous match
+      const selectedIds = new Set<string>(roster.map((p: any) => p.player_id as string))
+      setSelectedRosterPlayers(selectedIds)
+      
+      // Build roster form with previous players
+      setRosterForm(roster.map((p: any) => ({
+        player_id: p.player_id,
+        number: p.number,
+        name: p.name,
+        team: p.team,
+      })))
+      
+      showToast('Skopiowano skład z poprzedniego meczu')
+    } catch (e: any) {
+      showToast('Błąd kopiowania składu')
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
   const saveQuarterScore = async () => {
     const matchId = state.settings?.ActiveMatch
@@ -504,7 +583,7 @@ export default function Home() {
           >
             {state.matches.map(m => (
               <option key={m.match_id} value={m.match_id}>
-                {m.opponent || m.match_id}
+                {m.opponent ? `vs ${m.opponent} (${m.ageCategory}) ${m.place}` : m.match_id}
               </option>
             ))}
           </select>
@@ -572,6 +651,12 @@ export default function Home() {
               onClick={(e) => { addButtonPressEffect(e.currentTarget); setMode('stats'); setDrawerOpen(false) }}
             >
               Statystyki
+            </button>
+            <button
+              className={'btn menu-btn' + (mode === 'players' ? ' primary' : '')}
+              onClick={(e) => { addButtonPressEffect(e.currentTarget); setMode('players'); setDrawerOpen(false) }}
+            >
+              Zawodnicy
             </button>
             <button
               className={'btn menu-btn' + (mode === 'admin' ? ' primary' : '')}
@@ -658,25 +743,25 @@ export default function Home() {
                     </div>
                     <div className="subhead">Strata piłki</div>
                     <div className="grid">
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'shot_saved', phase: 'positional' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'shot_saved', phase: 'positional' }, e)}>
                         Obrona bramkarza
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'miss_turnover', phase: 'positional' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'miss_turnover', phase: 'positional' }, e)}>
                         Niecelny rzut – strata
                       </button>
                       <button className="btn" onClick={(e) => submitEvent({ action: 'miss_reset', phase: 'positional' }, e)}>
                         Niecelny rzut – 30s
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'bad_pass_turnover', phase: 'positional' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'bad_pass_turnover', phase: 'positional' }, e)}>
                         Niecelne podanie – strata
                       </button>
                       <button className="btn" onClick={(e) => submitEvent({ action: 'bad_pass_no', phase: 'positional' }, e)}>
                         Niecelne podanie – bez straty
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'turnover_1v1', phase: 'positional' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'turnover_1v1', phase: 'positional' }, e)}>
                         Strata 1:1
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'shot_clock', phase: 'positional' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'shot_clock', phase: 'positional' }, e)}>
                         Koniec czasu
                       </button>
                     </div>
@@ -721,25 +806,25 @@ export default function Home() {
                     </div>
                     <div className="subhead">Strata piłki</div>
                     <div className="grid">
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'shot_saved', phase: 'man_up' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'shot_saved', phase: 'man_up' }, e)}>
                         Obrona bramkarza
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'miss_turnover', phase: 'man_up' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'miss_turnover', phase: 'man_up' }, e)}>
                         Niecelny rzut – strata
                       </button>
                       <button className="btn" onClick={(e) => submitEvent({ action: 'miss_reset', phase: 'man_up' }, e)}>
                         Niecelny rzut – 30s
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'bad_pass_turnover', phase: 'man_up' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'bad_pass_turnover', phase: 'man_up' }, e)}>
                         Niecelne podanie – strata
                       </button>
                       <button className="btn" onClick={(e) => submitEvent({ action: 'bad_pass_no', phase: 'man_up' }, e)}>
                         Niecelne podanie – bez straty
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'turnover_1v1', phase: 'man_up' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'turnover_1v1', phase: 'man_up' }, e)}>
                         Strata 1:1
                       </button>
-                      <button className="btn danger" onClick={(e) => submitEvent({ action: 'shot_clock', phase: 'man_up' }, e)}>
+                      <button className="btn" onClick={(e) => submitEvent({ action: 'shot_clock', phase: 'man_up' }, e)}>
                         Koniec czasu
                       </button>
                     </div>
@@ -750,19 +835,19 @@ export default function Home() {
               <div className={`card ${attackMode === 'man_up' ? 'man-up-mode' : ''}`}>
                 <div className="subhead">Obrona</div>
                 <div className="grid">
-                  <button className="btn danger" onClick={(e) => submitEvent('no_return', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('no_return', e)}>
                     Brak powrotu
                   </button>
-                  <button className="btn danger" onClick={(e) => submitEvent('excl_comm_field', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('excl_comm_field', e)}>
                     Wykluczenie – w polu
                   </button>
-                  <button className="btn danger" onClick={(e) => submitEvent('excl_comm_center', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('excl_comm_center', e)}>
                     Wykluczenie – z centra
                   </button>
-                  <button className="btn danger" onClick={(e) => submitEvent('pen_comm_field', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('pen_comm_field', e)}>
                     Karny – w polu
                   </button>
-                  <button className="btn danger" onClick={(e) => submitEvent('pen_comm_center', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('pen_comm_center', e)}>
                     Karny – z centra
                   </button>
                   <button className="btn" onClick={(e) => submitEvent('shot_saved', e)}>
@@ -774,7 +859,7 @@ export default function Home() {
                   <button className="btn" onClick={(e) => submitEvent('block', e)}>
                     Blok
                   </button>
-                  <button className="btn danger" onClick={(e) => submitEvent('no_block', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('no_block', e)}>
                     Brak bloku
                   </button>
                 </div>
@@ -796,7 +881,29 @@ export default function Home() {
       {mode === 'stats' && <StatsPanel state={state} statsQuarter={statsQuarter} setStatsQuarter={setStatsQuarter} scoreQuarter={scoreQuarter} setScoreQuarter={setScoreQuarter} scoreMy={scoreMy} setScoreMy={setScoreMy} scoreOpp={scoreOpp} setScoreOpp={setScoreOpp} saveScore={saveScore} />}
 
       {/* ADMIN */}
-      {mode === 'admin' && <AdminPanel matchForm={matchForm} setMatchForm={setMatchForm} rosterForm={rosterForm} setRosterForm={setRosterForm} saveMatchWithRoster={saveMatchWithRoster} copyRosterFromPrevious={copyRosterFromPrevious} />}
+      {mode === 'admin' && <AdminPanel 
+        matchForm={matchForm} 
+        setMatchForm={setMatchForm} 
+        rosterForm={rosterForm} 
+        setRosterForm={setRosterForm} 
+        saveMatchWithRoster={saveMatchWithRoster} 
+        copyRosterFromPrevious={copyRosterFromPrevious}
+        players={state.players}
+        playerSearch={playerSearch}
+        setPlayerSearch={setPlayerSearch}
+        selectedRosterPlayers={selectedRosterPlayers}
+        setSelectedRosterPlayers={setSelectedRosterPlayers}
+      />}
+
+      {/* PLAYERS */}
+      {mode === 'players' && <PlayersPanel 
+        players={state.players}
+        playerForm={playerForm}
+        setPlayerForm={setPlayerForm}
+        addPlayer={addPlayer}
+        deletePlayer={deletePlayer}
+        loading={loading}
+      />}
 
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
@@ -1047,7 +1154,8 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
               if (!currentMatch) return 'Brak wybranego meczu'
               const matchInfo = [
                 currentMatch.opponent && `vs ${currentMatch.opponent}`,
-                currentMatch.place && `(${currentMatch.place})`,
+                currentMatch.ageCategory && `(${currentMatch.ageCategory})`,
+                currentMatch.place && currentMatch.place,
                 currentMatch.date && currentMatch.date
               ].filter(Boolean).join(' ')
               return `Aktualny mecz: ${matchInfo || currentMatch.match_id}`
@@ -1085,7 +1193,7 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
   )
 }
 
-function AdminPanel({ matchForm, setMatchForm, rosterForm, setRosterForm, saveMatchWithRoster, copyRosterFromPrevious }: any) {
+function AdminPanel({ matchForm, setMatchForm, rosterForm, setRosterForm, saveMatchWithRoster, copyRosterFromPrevious, players, playerSearch, setPlayerSearch, selectedRosterPlayers, setSelectedRosterPlayers }: any) {
   const picked = rosterForm.filter((p: any) => String(p.number || '').trim() !== '').sort((a: any, b: any) => Number(a.number) - Number(b.number))
 
   return (
@@ -1114,36 +1222,71 @@ function AdminPanel({ matchForm, setMatchForm, rosterForm, setRosterForm, saveMa
               onChange={e => setMatchForm({ ...matchForm, place: e.target.value })}
             />
           </div>
-          <button className="btn" onClick={copyRosterFromPrevious}>Skopiuj skład z poprzedniego meczu</button>
+          <select
+            className="input"
+            value={matchForm.ageCategory}
+            onChange={e => setMatchForm({ ...matchForm, ageCategory: e.target.value })}
+          >
+            <option value="U17">U17</option>
+            <option value="U19">U19</option>
+            <option value="Seniorzy">Seniorzy</option>
+          </select>
+          {/* Player Search */}
+          <input
+            className="input"
+            placeholder="🔍 Wyszukaj zawodników..."
+            value={playerSearch}
+            onChange={e => setPlayerSearch(e.target.value)}
+            style={{ marginTop: '16px' }}
+          />
+          
           <div className="muted">Wybierz skład i przypisz numery:</div>
           <div className="grid">
-            {rosterForm.map((p: any, idx: number) => (
-              <div key={p.player_id} className="card">
-                <div style={{ marginBottom: '6px' }}>{p.name}</div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    className="input"
-                    placeholder="#"
-                    style={{ width: '80px' }}
-                    value={p.number}
-                    onChange={e => {
-                      const updated = [...rosterForm]
-                      updated[idx].number = e.target.value
-                      setRosterForm(updated)
-                    }}
-                  />
-                  <input
-                    type="checkbox"
-                    checked={p.number !== ''}
-                    onChange={e => {
-                      const updated = [...rosterForm]
-                      if (!e.target.checked) updated[idx].number = ''
-                      setRosterForm(updated)
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+            {rosterForm
+              .filter((p: any) => 
+                !playerSearch || 
+                p.name.toLowerCase().includes(playerSearch.toLowerCase()) ||
+                p.number.toString().includes(playerSearch)
+              )
+              .map((p: any, idx: number) => {
+                const isSelected = selectedRosterPlayers.has(p.player_id)
+                return (
+                  <div key={p.player_id} className={`card ${isSelected ? 'selected' : ''}`}>
+                    <div style={{ marginBottom: '6px' }}>#{p.number || '?'} {p.name}</div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        className="input"
+                        placeholder="#"
+                        style={{ width: '80px' }}
+                        value={p.number}
+                        onChange={e => {
+                          const updated = [...rosterForm]
+                          updated[idx].number = e.target.value
+                          setRosterForm(updated)
+                        }}
+                      />
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => {
+                          const newSelected = new Set(selectedRosterPlayers)
+                          if (e.target.checked) {
+                            newSelected.add(p.player_id)
+                          } else {
+                            newSelected.delete(p.player_id)
+                          }
+                          setSelectedRosterPlayers(newSelected)
+                          
+                          // Update roster form
+                          const updated = [...rosterForm]
+                          updated[idx].number = e.target.checked ? (updated[idx].number || '') : ''
+                          setRosterForm(updated)
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
           </div>
           <button className="primary" onClick={saveMatchWithRoster}>
             Utwórz/Zapisz mecz
@@ -1164,6 +1307,74 @@ function AdminPanel({ matchForm, setMatchForm, rosterForm, setRosterForm, saveMa
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PlayersPanel({ players, playerForm, setPlayerForm, addPlayer, deletePlayer, loading }: any) {
+  return (
+    <div className="wrap">
+      <div className="col">
+        <h3>Zarządzanie zawodnikami</h3>
+        
+        {/* Add Player Form */}
+        <div className="panel">
+          <h4>Dodaj nowego zawodnika</h4>
+          <div className="two">
+            <input
+              className="input"
+              placeholder="Numer zawodnika"
+              value={playerForm.number}
+              onChange={e => setPlayerForm({ ...playerForm, number: e.target.value })}
+            />
+            <input
+              className="input"
+              placeholder="Imię i nazwisko"
+              value={playerForm.name}
+              onChange={e => setPlayerForm({ ...playerForm, name: e.target.value })}
+            />
+          </div>
+          <button 
+            className="btn primary" 
+            onClick={addPlayer}
+            disabled={loading || !playerForm.number || !playerForm.name}
+          >
+            Dodaj zawodnika
+          </button>
+        </div>
+
+        {/* Players List */}
+        <div className="panel">
+          <h4>Lista zawodników ({players.length})</h4>
+          {players.length === 0 ? (
+            <div className="muted">Brak zawodników w bazie</div>
+          ) : (
+            <div className="grid">
+              {players.map((player: Player) => (
+                <div key={player.player_id} className="card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                        #{player.number} {player.name}
+                      </div>
+                      <div className="muted small">
+                        ID: {player.player_id}
+                      </div>
+                    </div>
+                    <button
+                      className="btn danger small"
+                      onClick={() => deletePlayer(player.player_id)}
+                      disabled={loading}
+                    >
+                      Usuń
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
