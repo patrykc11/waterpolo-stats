@@ -35,8 +35,7 @@ services:
         condition: service_healthy
     command: >
       sh -c "npx prisma migrate deploy &&
-             npx prisma db seed &&
-             node server.js"
+         node server.js"
 
 volumes:
   postgres_data:
