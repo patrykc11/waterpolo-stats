@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import logger from "@/lib/logger";
 
 export async function GET() {
   try {
     const matches = await prisma.match.findMany({
+      where: { archived: false },
       orderBy: { createdAt: "desc" },
     });
 
@@ -18,6 +20,10 @@ export async function GET() {
       }))
     );
   } catch (error) {
+    logger.error("Get matches error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to get matches" },
       { status: 500 }
@@ -95,7 +101,10 @@ export async function POST(request: Request) {
       })),
     });
   } catch (error) {
-    console.error("Match create error:", error);
+    logger.error("Match create error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to create match" },
       { status: 500 }

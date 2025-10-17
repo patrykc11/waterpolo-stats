@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import logger from "@/lib/logger";
 
 export async function GET() {
   // Force fresh data - no caching
@@ -14,6 +15,7 @@ export async function GET() {
       orderBy: { number: "asc" },
     });
     const matches = await prisma.match.findMany({
+      where: { archived: false },
       orderBy: { createdAt: "desc" },
     });
 
@@ -31,13 +33,13 @@ export async function GET() {
           ActiveMatch: settings?.activeMatch || "",
           Quarter: settings?.quarter || 1,
         },
-        players: players.map((p) => ({
+        players: players.map((p: any) => ({
           player_id: p.playerId,
           number: p.number,
           name: p.name,
           team: p.team,
         })),
-        matches: matches.map((m) => ({
+        matches: matches.map((m: any) => ({
           match_id: m.matchId,
           date: m.date,
           opponent: m.opponent,
@@ -57,7 +59,10 @@ export async function GET() {
       { headers }
     );
   } catch (error) {
-    console.error("Bootstrap error:", error);
+    logger.error("Bootstrap error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Failed to load data" }, { status: 500 });
   }
 }

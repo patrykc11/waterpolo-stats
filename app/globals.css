@@ -204,19 +204,6 @@ header {
   justify-content: start;
 }
 
-@media (max-width: 600px) {
-  .grid {
-    grid-template-columns: repeat(auto-fit, 120px);
-  }
-}
-
-/* For iPad - fixed width columns matching button size */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .grid {
-    grid-template-columns: repeat(auto-fit, 120px);
-  }
-}
-
 /* Form elements */
 select,
 .input,

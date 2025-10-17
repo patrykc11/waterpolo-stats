@@ -78,7 +78,7 @@ export default function Home() {
     rosterActive: [],
   })
   
-  const [mode, setMode] = useState<'score' | 'stats' | 'admin' | 'players'>('score')
+  const [mode, setMode] = useState<'score' | 'stats' | 'admin' | 'players' | 'matches'>('score')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -111,6 +111,16 @@ export default function Home() {
   }>({ show: false, quarter: 1, myScore: '', oppScore: '' })
   const [endMatchPopup, setEndMatchPopup] = useState(false)
   const [targetQuarter, setTargetQuarter] = useState<number | null>(null)
+  const [editMatchPopup, setEditMatchPopup] = useState<{
+    show: boolean
+    match: Match | null
+  }>({ show: false, match: null })
+  const [editMatchForm, setEditMatchForm] = useState({
+    date: '',
+    opponent: '',
+    place: '',
+    ageCategory: 'Seniorzy',
+  })
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -564,6 +574,68 @@ export default function Home() {
     }
   }
 
+  const archiveMatch = async (matchId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten mecz? Mecz zostanie zarchiwizowany.')) return
+
+    setLoading(true)
+    try {
+      await callApi('/api/matches/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId }),
+      })
+      
+      showToast('Mecz zarchiwizowany')
+      
+      // Refresh data
+      bootstrap()
+    } catch (e: any) {
+      showToast(e.message || 'Błąd')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const editMatch = async () => {
+    const match = editMatchPopup.match
+    if (!match) return
+
+    setLoading(true)
+    try {
+      await callApi('/api/matches/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId: match.match_id,
+          date: editMatchForm.date,
+          opponent: editMatchForm.opponent,
+          place: editMatchForm.place,
+          ageCategory: editMatchForm.ageCategory,
+        }),
+      })
+      
+      setEditMatchPopup({ show: false, match: null })
+      showToast('Mecz zaktualizowany')
+      
+      // Refresh data
+      bootstrap()
+    } catch (e: any) {
+      showToast(e.message || 'Błąd')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openEditMatch = (match: Match) => {
+    setEditMatchForm({
+      date: match.date,
+      opponent: match.opponent,
+      place: match.place,
+      ageCategory: match.ageCategory,
+    })
+    setEditMatchPopup({ show: true, match })
+  }
+
   useEffect(() => {
     if (mode === 'admin') {
       buildRosterForm()
@@ -657,6 +729,12 @@ export default function Home() {
               onClick={(e) => { addButtonPressEffect(e.currentTarget); setMode('players'); setDrawerOpen(false) }}
             >
               Zawodnicy
+            </button>
+            <button
+              className={'btn menu-btn' + (mode === 'matches' ? ' primary' : '')}
+              onClick={(e) => { addButtonPressEffect(e.currentTarget); setMode('matches'); setDrawerOpen(false) }}
+            >
+              Mecze
             </button>
             <button
               className={'btn menu-btn' + (mode === 'admin' ? ' primary' : '')}
@@ -905,6 +983,14 @@ export default function Home() {
         loading={loading}
       />}
 
+      {/* MATCHES */}
+      {mode === 'matches' && <MatchesPanel 
+        matches={state.matches}
+        archiveMatch={archiveMatch}
+        openEditMatch={openEditMatch}
+        loading={loading}
+      />}
+
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
 
@@ -999,6 +1085,61 @@ export default function Home() {
                 disabled={loading}
               >
                 Tak, zakończ mecz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Match Popup */}
+      {editMatchPopup.show && (
+        <div className="loading-overlay">
+          <div className="loader-box" style={{ minWidth: '400px' }}>
+            <h4 style={{ margin: '0 0 16px', color: '#cde' }}>Edytuj mecz</h4>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <input
+                className="input"
+                placeholder="Data (np. 2025-10-05)"
+                value={editMatchForm.date}
+                onChange={e => setEditMatchForm({ ...editMatchForm, date: e.target.value })}
+              />
+              <div className="two">
+                <input
+                  className="input"
+                  placeholder="Przeciwnik"
+                  value={editMatchForm.opponent}
+                  onChange={e => setEditMatchForm({ ...editMatchForm, opponent: e.target.value })}
+                />
+                <input
+                  className="input"
+                  placeholder="Miejsce"
+                  value={editMatchForm.place}
+                  onChange={e => setEditMatchForm({ ...editMatchForm, place: e.target.value })}
+                />
+              </div>
+              <select
+                className="input"
+                value={editMatchForm.ageCategory}
+                onChange={e => setEditMatchForm({ ...editMatchForm, ageCategory: e.target.value })}
+              >
+                <option value="U17">U17</option>
+                <option value="U19">U19</option>
+                <option value="Seniorzy">Seniorzy</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button 
+                className="btn" 
+                onClick={() => setEditMatchPopup({ show: false, match: null })}
+              >
+                Anuluj
+              </button>
+              <button 
+                className="primary" 
+                onClick={editMatch}
+                disabled={loading}
+              >
+                Zapisz zmiany
               </button>
             </div>
           </div>
@@ -1369,6 +1510,59 @@ function PlayersPanel({ players, playerForm, setPlayerForm, addPlayer, deletePla
                   >
                     Usuń
                   </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MatchesPanel({ matches, archiveMatch, openEditMatch, loading }: any) {
+  return (
+    <div className="wrap">
+      <div className="col">
+        <h3>Zarządzanie meczami</h3>
+        
+        <div className="panel">
+          <h4>Lista meczów ({matches.length})</h4>
+          {matches.length === 0 ? (
+            <div className="muted">Brak meczów w bazie</div>
+          ) : (
+            <div className="grid">
+              {matches.map((match: Match) => (
+                <div key={match.match_id} className="card">
+                  <div style={{ fontWeight: 'bold', fontSize: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {match.opponent ? `vs ${match.opponent}` : match.match_id}
+                  </div>
+                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {match.date && `${match.date} • `}{match.ageCategory}{match.place && ` • ${match.place}`}
+                  </div>
+                  <div className="muted small" style={{ marginTop: '4px' }}>
+                    Status: <span style={{ color: match.status === 'active' ? '#51cf66' : '#ff6b6b' }}>
+                      {match.status === 'active' ? 'Aktywny' : 'Zakończony'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button
+                      className="btn small"
+                      onClick={() => openEditMatch(match)}
+                      disabled={loading}
+                      style={{ flex: 1 }}
+                    >
+                      Edytuj
+                    </button>
+                    <button
+                      className="btn danger small"
+                      onClick={() => archiveMatch(match.match_id)}
+                      disabled={loading}
+                      style={{ flex: 1 }}
+                    >
+                      Usuń
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

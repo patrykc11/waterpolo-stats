@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import logger from "@/lib/logger";
 
 export async function POST(request: Request) {
   try {
@@ -56,9 +57,13 @@ export async function POST(request: Request) {
 
     await prisma.event.createMany({ data: eventsData });
 
+    logger.info("Events saved successfully", { count: eventsData.length });
     return NextResponse.json({ ok: true, count: eventsData.length });
   } catch (error) {
-    console.error("Events error:", error);
+    logger.error("Events error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to save events" },
       { status: 500 }

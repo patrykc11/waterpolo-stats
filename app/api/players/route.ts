@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import logger from "@/lib/logger";
 
 export async function GET() {
   try {
@@ -16,6 +17,10 @@ export async function GET() {
       }))
     );
   } catch (error) {
+    logger.error("Get players error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to get players" },
       { status: 500 }
@@ -57,6 +62,11 @@ export async function POST(request: Request) {
       },
     });
 
+    logger.info("Player created successfully", {
+      playerId: player.playerId,
+      name: player.name,
+      number: player.number,
+    });
     return NextResponse.json({
       player_id: player.playerId,
       number: player.number,
@@ -64,7 +74,10 @@ export async function POST(request: Request) {
       team: player.team,
     });
   } catch (error) {
-    console.error("Player create error:", error);
+    logger.error("Player create error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to create player" },
       { status: 500 }
@@ -88,9 +101,14 @@ export async function DELETE(request: Request) {
       where: { playerId: player_id },
     });
 
+    logger.info("Player deleted successfully", { playerId: player_id });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Player delete error:", error);
+    logger.error("Player delete error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      playerId: player_id,
+    });
     return NextResponse.json(
       { error: "Failed to delete player" },
       { status: 500 }
