@@ -3,8 +3,11 @@ import { prisma } from "@/lib/prisma";
 import logger from "@/lib/logger";
 
 export async function POST(request: Request) {
+  let matchId: string | undefined;
+
   try {
-    const { matchId } = await request.json();
+    const body = await request.json();
+    matchId = body.matchId;
 
     if (!matchId) {
       return NextResponse.json({ error: "Brak matchId" }, { status: 400 });
@@ -25,7 +28,7 @@ export async function POST(request: Request) {
     logger.error("Archive match error:", {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
-      matchId,
+      matchId: matchId || "unknown",
     });
     return NextResponse.json(
       { error: "Failed to archive match" },

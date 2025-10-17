@@ -3,9 +3,12 @@ import { prisma } from "@/lib/prisma";
 import logger from "@/lib/logger";
 
 export async function POST(request: Request) {
+  let matchId: string | undefined;
+
   try {
-    const { matchId, date, opponent, place, ageCategory } =
-      await request.json();
+    const body = await request.json();
+    const { date, opponent, place, ageCategory } = body;
+    matchId = body.matchId;
 
     if (!matchId) {
       return NextResponse.json({ error: "Brak matchId" }, { status: 400 });
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
     logger.error("Edit match error:", {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
-      matchId,
+      matchId: matchId || "unknown",
     });
     return NextResponse.json(
       { error: "Failed to edit match" },

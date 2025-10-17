@@ -86,8 +86,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  let player_id: string | undefined;
+
   try {
-    const { player_id } = await request.json();
+    const body = await request.json();
+    player_id = body.player_id;
 
     if (!player_id) {
       return NextResponse.json(
@@ -107,7 +110,7 @@ export async function DELETE(request: Request) {
     logger.error("Player delete error:", {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
-      playerId: player_id,
+      playerId: player_id || "unknown",
     });
     return NextResponse.json(
       { error: "Failed to delete player" },
