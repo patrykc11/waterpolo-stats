@@ -1355,23 +1355,20 @@ function PlayersPanel({ players, playerForm, setPlayerForm, addPlayer, deletePla
             <div className="grid">
               {players.map((player: Player) => (
                 <div key={player.player_id} className="card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                        #{player.number} {player.name}
-                      </div>
-                      <div className="muted small">
-                        ID: {player.player_id}
-                      </div>
-                    </div>
-                    <button
-                      className="btn danger small"
-                      onClick={() => deletePlayer(player.player_id)}
-                      disabled={loading}
-                    >
-                      Usuń
-                    </button>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    #{player.number} {player.name}
                   </div>
+                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    ID: {player.player_id}
+                  </div>
+                  <button
+                    className="btn danger small"
+                    onClick={() => deletePlayer(player.player_id)}
+                    disabled={loading}
+                    style={{ marginTop: '8px', width: '100%' }}
+                  >
+                    Usuń
+                  </button>
                 </div>
               ))}
             </div>

@@ -109,6 +109,16 @@ header {
   padding: 16px;
 }
 
+/* Desktop - full width layout */
+@media (min-width: 1025px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    max-width: none;
+    width: 100vw;
+    padding: 16px;
+  }
+}
+
 @media (max-width: 1024px) {
   .wrap {
     grid-template-columns: 1fr;
