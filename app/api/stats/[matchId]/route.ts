@@ -39,41 +39,66 @@ export async function GET(
       final: { my: match?.finalMy || 0, opp: match?.finalOpp || 0 },
     };
 
-    // Compute stats
+    // Compute stats - 44 fields matching assistant buttons
     const flagFields = [
-      "isGoalFromPlay",
-      "isGoalFromCenter",
-      "isGoalPutback",
-      "isGoal5m",
-      "isAssist",
-      "isExclDrawn",
-      "isExclCommitted",
-      "isPenaltyDrawn",
-      "isPenaltyCommitted",
-      "isTurnover",
-      "isTurnover1v1",
-      "isShotSavedGk",
-      "isShotMissTurnover",
-      "isShotMissReset30",
-      "isBadPassTurnover",
-      "isBadPassNoTurnover",
-      "isShotClockViolation",
-      "isSteal",
-      "isBlockHand",
-      "isNoBlock",
-      "isNoReturn",
-      "isGoalCounter",
-      "isShotOut",
-      "isBadPass2m",
-      "isPressWin",
-      "isInterception",
+      // ATAK POZYCYJNY (15)
+      "isGoalFromPlayPositional",
+      "isGoalFromPlayCounter",
+      "isGoalFromCenterPositional",
+      "isAssistPositional",
+      "isShotSavedGkPositional",
+      "isShotMissTurnoverPositional",
+      "isShotMissReset30Positional",
+      "isBadPassTurnoverPositional",
+      "isBadPassNoTurnoverPositional",
+      "isTurnover1v1Positional",
+      "isShotClockViolationPositional",
+      "isExclDrawnFieldPositional",
+      "isExclDrawnCenterPositional",
+      "isPenaltyDrawnFieldPositional",
+      "isPenaltyDrawnCenterPositional",
+      // ATAK PRZEWAGA (10)
+      "isGoalFromCenterManUp",
+      "isGoal5mManUp",
+      "isAssistManUp",
+      "isShotSavedGkManUp",
+      "isShotMissTurnoverManUp",
+      "isShotMissReset30ManUp",
+      "isBadPassTurnoverManUp",
+      "isBadPassNoTurnoverManUp",
+      "isTurnover1v1ManUp",
+      "isShotClockViolationManUp",
+      // RZUTY KARNE (1)
+      "isGoal5mPenalty",
+      // OBRONA POZYCYJNA (9)
+      "isNoReturnPositional",
+      "isExclCommittedFieldPositional",
+      "isExclCommittedCenterPositional",
+      "isPenaltyCommittedFieldPositional",
+      "isPenaltyCommittedCenterPositional",
+      "isShotSavedGkDefPositional",
+      "isStealPositional",
+      "isBlockHandPositional",
+      "isNoBlockPositional",
+      // OBRONA PRZEWAGA (9)
+      "isNoReturnManUp",
+      "isExclCommittedFieldManUp",
+      "isExclCommittedCenterManUp",
+      "isPenaltyCommittedFieldManUp",
+      "isPenaltyCommittedCenterManUp",
+      "isShotSavedGkDefManUp",
+      "isStealManUp",
+      "isBlockHandManUp",
+      "isNoBlockManUp",
     ];
 
     const flagsSnakeCase = flagFields.map(camelToSnake);
 
     const zeroFlags = () => {
       const obj: any = {};
-      flagsSnakeCase.forEach((f) => (obj[f] = 0));
+      flagsSnakeCase.forEach((f) => {
+        obj[f] = 0;
+      });
       return obj;
     };
 
@@ -140,5 +165,11 @@ export async function GET(
 }
 
 function camelToSnake(str: string): string {
-  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  // Special case for fields with numbers like "5m" and "1v1"
+  return str
+    .replace(/5m/g, "_5m_")
+    .replace(/1v1/g, "_1v1_")
+    .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+    .replace(/__/g, "_") // Remove double underscores
+    .replace(/^_/, ""); // Remove leading underscore
 }

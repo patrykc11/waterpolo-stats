@@ -19,6 +19,29 @@ Nowoczesny dashboard do prowadzenia statystyk na meczach piłki wodnej, zbudowan
 
 ### 1. Uruchomienie całej aplikacji
 
+**Pierwszy raz:**
+
+```bash
+# Sklonuj repozytorium
+git clone <repo-url>
+cd waterpolo-stats
+
+# Uruchom aplikację
+docker-compose up -d
+
+# Poczekaj aż baza się uruchomi, potem uruchom migracje
+docker-compose exec app npx prisma migrate deploy
+
+# Uruchom seed (tworzy domyślne settings)
+docker-compose exec app npm run prisma:seed
+```
+
+**Kolejne uruchomienia:**
+
+```bash
+docker-compose up -d
+```
+
 ```bash
 # Skopiuj plik .env.example
 cp .env.example .env

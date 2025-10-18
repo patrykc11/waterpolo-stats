@@ -37,17 +37,13 @@ type State = {
 const FLAG_LABELS: Record<string, string> = {
   is_goal_from_play: 'G z gry',
   is_goal_from_center: 'G z 2m',
-  is_goal_putback: 'Dobitka',
   is_goal_5m: 'G 5m',
-  is_goal5m: 'G 5m', // Dodatkowe tłumaczenie dla klucza bez podkreślnika
   is_assist: 'Asysty',
   is_excl_drawn: 'Sprow. wykl.',
   is_excl_committed: 'Wykl. spowod.',
   is_penalty_drawn: 'Sprow. karny',
   is_penalty_committed: 'Karny spowod.',
-  is_turnover: 'Strata',
   is_turnover_1v1: 'Strata 1:1',
-  is_turnover1v1: 'Strata 1:1', // Dodatkowe tłumaczenie dla klucza bez podkreślnika
   is_bad_pass_turnover: 'Złe podanie (strata)',
   is_bad_pass_no_turnover: 'Złe podanie (bez straty)',
   is_shot_clock_violation: 'Koniec czasu',
@@ -58,12 +54,45 @@ const FLAG_LABELS: Record<string, string> = {
   is_block_hand: 'Blok',
   is_no_block: 'Brak bloku',
   is_no_return: 'Brak powrotu',
-  is_goal_counter: 'G kontra',
-  is_shot_out: 'Strzał poza',
-  is_bad_pass_2m: 'Zła piłka 2m',
-  is_bad_pass2m: 'Zła piłka 2m', // Dodatkowe tłumaczenie dla klucza bez podkreślnika
-  is_press_win: 'Wygrany pressing',
-  is_interception: 'Przechwyt (podanie)',
+  // Phase-specific labels
+  is_goal_from_play_positional: 'G z gry (poz.)',
+  is_goal_from_play_man_up: 'G z gry (przew.)',
+  is_goal_from_center_positional: 'G z 2m (poz.)',
+  is_goal_from_center_man_up: 'G z 2m (przew.)',
+  is_goal_5m_positional: 'G 5m (poz.)',
+  is_goal_5m_man_up: 'G 5m (przew.)',
+  is_assist_positional: 'Asysty (poz.)',
+  is_assist_man_up: 'Asysty (przew.)',
+  is_excl_drawn_positional: 'Sprow. wykl. (poz.)',
+  is_excl_drawn_man_up: 'Sprow. wykl. (przew.)',
+  is_excl_committed_positional: 'Wykl. spowod. (poz.)',
+  is_excl_committed_man_up: 'Wykl. spowod. (przew.)',
+  is_penalty_drawn_positional: 'Sprow. karny (poz.)',
+  is_penalty_drawn_man_up: 'Sprow. karny (przew.)',
+  is_penalty_committed_positional: 'Karny spowod. (poz.)',
+  is_penalty_committed_man_up: 'Karny spowod. (przew.)',
+  is_turnover_1v1_positional: 'Strata 1:1 (poz.)',
+  is_turnover_1v1_man_up: 'Strata 1:1 (przew.)',
+  is_bad_pass_turnover_positional: 'Złe podanie str. (poz.)',
+  is_bad_pass_turnover_man_up: 'Złe podanie str. (przew.)',
+  is_bad_pass_no_turnover_positional: 'Złe podanie bez str. (poz.)',
+  is_bad_pass_no_turnover_man_up: 'Złe podanie bez str. (przew.)',
+  is_shot_clock_violation_positional: 'Koniec czasu (poz.)',
+  is_shot_clock_violation_man_up: 'Koniec czasu (przew.)',
+  is_shot_saved_gk_positional: 'Obrona GK (poz.)',
+  is_shot_saved_gk_man_up: 'Obrona GK (przew.)',
+  is_shot_miss_turnover_positional: 'Rzut niecelny str. (poz.)',
+  is_shot_miss_turnover_man_up: 'Rzut niecelny str. (przew.)',
+  is_shot_miss_reset30_positional: 'Rzut niecelny 30s (poz.)',
+  is_shot_miss_reset30_man_up: 'Rzut niecelny 30s (przew.)',
+  is_steal_positional: 'Przejęcie (poz.)',
+  is_steal_man_up: 'Przejęcie (przew.)',
+  is_block_hand_positional: 'Blok (poz.)',
+  is_block_hand_man_up: 'Blok (przew.)',
+  is_no_block_positional: 'Brak bloku (poz.)',
+  is_no_block_man_up: 'Brak bloku (przew.)',
+  is_no_return_positional: 'Brak powrotu (poz.)',
+  is_no_return_man_up: 'Brak powrotu (przew.)',
 }
 
 export default function Home() {
@@ -291,37 +320,157 @@ export default function Home() {
       player_id: state.selected.player_id,
       player_name: state.selected.name,
       note,
-      phase,
     }
 
     const flags: any = {}
     const act = def?.action || def
+    const isManUp = attackMode === 'man_up'
 
     switch (act) {
-      case 'goal_play_pos': flags.is_goal_from_play = 1; break
-      case 'goal_center_manup': flags.is_goal_from_center = 1; break
-      case 'goal_5m': flags.is_goal_5m = 1; break
-      case 'assist': flags.is_assist = 1; break
-      case 'shot_saved': flags.is_shot_saved_gk = 1; break
-      case 'miss_turnover': flags.is_shot_miss_turnover = 1; break
-      case 'miss_reset': flags.is_shot_miss_reset30 = 1; break
-      case 'bad_pass_turnover': flags.is_bad_pass_turnover = 1; break
-      case 'bad_pass_no': flags.is_bad_pass_no_turnover = 1; break
-      case 'turnover_1v1': flags.is_turnover_1v1 = 1; break
-      case 'shot_clock': flags.is_shot_clock_violation = 1; break
-      case 'penalty_drawn_field': flags.is_penalty_drawn = 1; base.penalty_drawn_location = 'field'; break
-      case 'penalty_drawn_center': flags.is_penalty_drawn = 1; base.penalty_drawn_location = 'center'; break
-      case 'excl_drawn_field': flags.is_excl_drawn = 1; base.excl_drawn_location = 'field'; break
-      case 'excl_drawn_center': flags.is_excl_drawn = 1; base.excl_drawn_location = 'center'; break
-      case 'excl_comm_field': flags.is_excl_committed = 1; base.excl_committed_location = 'field'; break
-      case 'excl_comm_center': flags.is_excl_committed = 1; base.excl_committed_location = 'center'; break
-      case 'pen_comm_field': flags.is_penalty_committed = 1; base.penalty_committed_location = 'field'; break
-      case 'pen_comm_center': flags.is_penalty_committed = 1; base.penalty_committed_location = 'center'; break
-      case 'no_return': flags.is_no_return = 1; break
-      case 'steal': flags.is_steal = 1; break
-      case 'block': flags.is_block_hand = 1; break
-      case 'no_block': flags.is_no_block = 1; break
-      case 'goal_penalty': flags.is_goal_5m = 1; base.phase = 'penalty'; break
+      // ATAK POZYCYJNY
+      case 'goal_play_pos': 
+        if (phase === 'counter') {
+          flags.is_goal_from_play_counter = 1
+        } else {
+          flags.is_goal_from_play_positional = 1
+        }
+        break
+      case 'goal_center_manup': 
+        if (isManUp) {
+          flags.is_goal_from_center_man_up = 1
+        } else {
+          flags.is_goal_from_center_positional = 1
+        }
+        break
+      case 'goal_5m': flags.is_goal_5m_man_up = 1; break
+      case 'assist': 
+        if (isManUp) {
+          flags.is_assist_man_up = 1
+        } else {
+          flags.is_assist_positional = 1
+        }
+        break
+      case 'shot_saved': 
+        if (isManUp) {
+          flags.is_shot_saved_gk_man_up = 1
+        } else {
+          flags.is_shot_saved_gk_positional = 1
+        }
+        break
+      case 'miss_turnover': 
+        if (isManUp) {
+          flags.is_shot_miss_turnover_man_up = 1
+        } else {
+          flags.is_shot_miss_turnover_positional = 1
+        }
+        break
+      case 'miss_reset': 
+        if (isManUp) {
+          flags.is_shot_miss_reset30_man_up = 1
+        } else {
+          flags.is_shot_miss_reset30_positional = 1
+        }
+        break
+      case 'bad_pass_turnover': 
+        if (isManUp) {
+          flags.is_bad_pass_turnover_man_up = 1
+        } else {
+          flags.is_bad_pass_turnover_positional = 1
+        }
+        break
+      case 'bad_pass_no': 
+        if (isManUp) {
+          flags.is_bad_pass_no_turnover_man_up = 1
+        } else {
+          flags.is_bad_pass_no_turnover_positional = 1
+        }
+        break
+      case 'turnover_1v1': 
+        if (isManUp) {
+          flags.is_turnover_1v1_man_up = 1
+        } else {
+          flags.is_turnover_1v1_positional = 1
+        }
+        break
+      case 'shot_clock': 
+        if (isManUp) {
+          flags.is_shot_clock_violation_man_up = 1
+        } else {
+          flags.is_shot_clock_violation_positional = 1
+        }
+        break
+      case 'excl_drawn_field': flags.is_excl_drawn_field_positional = 1; break
+      case 'excl_drawn_center': flags.is_excl_drawn_center_positional = 1; break
+      case 'penalty_drawn_field': flags.is_penalty_drawn_field_positional = 1; break
+      case 'penalty_drawn_center': flags.is_penalty_drawn_center_positional = 1; break
+      
+      // RZUTY KARNE
+      case 'goal_penalty': flags.is_goal_5m_penalty = 1; break
+      
+      // OBRONA (przyciski bez phase, ale zapisujemy z podziałem na fazy)
+      case 'no_return': 
+        if (isManUp) {
+          flags.is_no_return_man_up = 1
+        } else {
+          flags.is_no_return_positional = 1
+        }
+        break
+      case 'excl_comm_field': 
+        if (isManUp) {
+          flags.is_excl_committed_field_man_up = 1
+        } else {
+          flags.is_excl_committed_field_positional = 1
+        }
+        break
+      case 'excl_comm_center': 
+        if (isManUp) {
+          flags.is_excl_committed_center_man_up = 1
+        } else {
+          flags.is_excl_committed_center_positional = 1
+        }
+        break
+      case 'pen_comm_field': 
+        if (isManUp) {
+          flags.is_penalty_committed_field_man_up = 1
+        } else {
+          flags.is_penalty_committed_field_positional = 1
+        }
+        break
+      case 'pen_comm_center': 
+        if (isManUp) {
+          flags.is_penalty_committed_center_man_up = 1
+        } else {
+          flags.is_penalty_committed_center_positional = 1
+        }
+        break
+      case 'shot_saved_def':
+        if (isManUp) {
+          flags.is_shot_saved_gk_def_man_up = 1
+        } else {
+          flags.is_shot_saved_gk_def_positional = 1
+        }
+        break
+      case 'steal': 
+        if (isManUp) {
+          flags.is_steal_man_up = 1
+        } else {
+          flags.is_steal_positional = 1
+        }
+        break
+      case 'block': 
+        if (isManUp) {
+          flags.is_block_hand_man_up = 1
+        } else {
+          flags.is_block_hand_positional = 1
+        }
+        break
+      case 'no_block': 
+        if (isManUp) {
+          flags.is_no_block_man_up = 1
+        } else {
+          flags.is_no_block_positional = 1
+        }
+        break
       default: break
     }
 
@@ -928,7 +1077,7 @@ export default function Home() {
                   <button className="btn" onClick={(e) => submitEvent('pen_comm_center', e)}>
                     Karny – z centra
                   </button>
-                  <button className="btn" onClick={(e) => submitEvent('shot_saved', e)}>
+                  <button className="btn" onClick={(e) => submitEvent('shot_saved_def', e)}>
                     Obrona bramkarza
                   </button>
                   <button className="btn" onClick={(e) => submitEvent('steal', e)}>
@@ -1186,7 +1335,14 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
   const scoreText = `Q1 ${s['1'].my}:${s['1'].opp} • Q2 ${s['2'].my}:${s['2'].opp} • Q3 ${s['3'].my}:${s['3'].opp} • Q4 ${s['4'].my}:${s['4'].opp} • F ${finalScore}`
 
   const sumGoals = (obj: any) => {
-    const keys = ['is_goal_from_play', 'is_goal_5m', 'is_goal_from_center', 'is_goal_counter', 'is_goal_putback']
+    const keys = [
+      'is_goal_from_play_positional',
+      'is_goal_from_play_counter', 
+      'is_goal_from_center_positional',
+      'is_goal_from_center_man_up',
+      'is_goal_5m_man_up',
+      'is_goal_5m_penalty'
+    ]
     return keys.reduce((a, k) => a + (Number(obj?.[k] || 0)), 0)
   }
 
@@ -1196,16 +1352,95 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
     // Create player lookup
     const playersById = Object.fromEntries(stats.players.map((p: any) => [p.player_id, p]))
     
-    // Transpose: rows = stats, columns = players
-    const statRows = flags.map(flag => {
-      const row: any = { stat: FLAG_LABELS[flag] || flag, flag }
-      rows.forEach(playerRow => {
-        const playerKey = playerRow.name // Use name as key
-        row[playerKey] = playerRow[flag] || 0
+    // Define stats exactly as they appear in assistant - grouped by phase
+    const statGroups = [
+      {
+        title: '🏐 ATAK POZYCYJNY',
+        stats: [
+          { key: 'is_goal_from_play_positional', label: 'G z akcji' },
+          { key: 'is_goal_from_play_counter', label: 'G z kontrataku' },
+          { key: 'is_goal_from_center_positional', label: 'G z centra' },
+          { key: 'is_assist_positional', label: 'Asysty' },
+          { key: 'is_shot_saved_gk_positional', label: 'Obrona bramkarza' },
+          { key: 'is_shot_miss_turnover_positional', label: 'Niecelny rzut – strata' },
+          { key: 'is_shot_miss_reset30_positional', label: 'Niecelny rzut – 30s' },
+          { key: 'is_bad_pass_turnover_positional', label: 'Niecelne podanie – strata' },
+          { key: 'is_bad_pass_no_turnover_positional', label: 'Niecelne podanie – bez straty' },
+          { key: 'is_turnover_1v1_positional', label: 'Strata 1:1' },
+          { key: 'is_shot_clock_violation_positional', label: 'Koniec czasu' },
+          { key: 'is_excl_drawn_field_positional', label: 'Sprow. wykl. – w polu' },
+          { key: 'is_excl_drawn_center_positional', label: 'Sprow. wykl. – z centra' },
+          { key: 'is_penalty_drawn_field_positional', label: 'Sprow. karny – w polu' },
+          { key: 'is_penalty_drawn_center_positional', label: 'Sprow. karny – z centra' },
+        ]
+      },
+      {
+        title: '⚡ ATAK PRZEWAGA',
+        stats: [
+          { key: 'is_goal_from_center_man_up', label: 'G z 2 metra' },
+          { key: 'is_goal_5m_man_up', label: 'G z 5 metra' },
+          { key: 'is_assist_man_up', label: 'Asysty' },
+          { key: 'is_shot_saved_gk_man_up', label: 'Obrona bramkarza' },
+          { key: 'is_shot_miss_turnover_man_up', label: 'Niecelny rzut – strata' },
+          { key: 'is_shot_miss_reset30_man_up', label: 'Niecelny rzut – 30s' },
+          { key: 'is_bad_pass_turnover_man_up', label: 'Niecelne podanie – strata' },
+          { key: 'is_bad_pass_no_turnover_man_up', label: 'Niecelne podanie – bez straty' },
+          { key: 'is_turnover_1v1_man_up', label: 'Strata 1:1' },
+          { key: 'is_shot_clock_violation_man_up', label: 'Koniec czasu' },
+        ]
+      },
+      {
+        title: '🎯 RZUTY KARNE',
+        stats: [
+          { key: 'is_goal_5m_penalty', label: 'Bramka z karnego' },
+        ]
+      },
+      {
+        title: '🛡️ OBRONA POZYCYJNA',
+        stats: [
+          { key: 'is_no_return_positional', label: 'Brak powrotu' },
+          { key: 'is_excl_committed_field_positional', label: 'Wykl. spowod. – w polu' },
+          { key: 'is_excl_committed_center_positional', label: 'Wykl. spowod. – z centra' },
+          { key: 'is_penalty_committed_field_positional', label: 'Karny spowod. – w polu' },
+          { key: 'is_penalty_committed_center_positional', label: 'Karny spowod. – z centra' },
+          { key: 'is_shot_saved_gk_def_positional', label: 'Obrona bramkarza' },
+          { key: 'is_steal_positional', label: 'Przejęcie piłki' },
+          { key: 'is_block_hand_positional', label: 'Blok' },
+          { key: 'is_no_block_positional', label: 'Brak bloku' },
+        ]
+      },
+      {
+        title: '🛡️ OBRONA PRZEWAGA',
+        stats: [
+          { key: 'is_no_return_man_up', label: 'Brak powrotu' },
+          { key: 'is_excl_committed_field_man_up', label: 'Wykl. spowod. – w polu' },
+          { key: 'is_excl_committed_center_man_up', label: 'Wykl. spowod. – z centra' },
+          { key: 'is_penalty_committed_field_man_up', label: 'Karny spowod. – w polu' },
+          { key: 'is_penalty_committed_center_man_up', label: 'Karny spowod. – z centra' },
+          { key: 'is_shot_saved_gk_def_man_up', label: 'Obrona bramkarza' },
+          { key: 'is_steal_man_up', label: 'Przejęcie piłki' },
+          { key: 'is_block_hand_man_up', label: 'Blok' },
+          { key: 'is_no_block_man_up', label: 'Brak bloku' },
+        ]
+      }
+    ]
+
+    // Build all stat rows with group headers
+    const allStatRows: any[] = []
+    
+    statGroups.forEach(group => {
+      // Add group header row
+      allStatRows.push({ isGroupHeader: true, groupTitle: group.title })
+      
+      group.stats.forEach(stat => {
+        const row: any = { stat: stat.label, flag: stat.key }
+        rows.forEach(playerRow => {
+          const playerKey = playerRow.name
+          row[playerKey] = playerRow[stat.key] || 0
+        })
+        row._total = totalsObj ? (totalsObj[stat.key] || 0) : 0
+        allStatRows.push(row)
       })
-      // Add totals column
-      row._total = totalsObj ? (totalsObj[flag] || 0) : 0
-      return row
     })
 
     // Add goals sum row
@@ -1236,15 +1471,26 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
             </tr>
           </thead>
           <tbody>
-            {statRows.map((row, i) => (
-              <tr key={row.flag}>
-                <td>{row.stat}</td>
-                <td style={{ fontWeight: 600 }}>{row._total}</td>
-                {rows.map(playerRow => (
-                  <td key={playerRow.name}>{row[playerRow.name]}</td>
-                ))}
-              </tr>
-            ))}
+            {allStatRows.map((row, i) => {
+              if (row.isGroupHeader) {
+                return (
+                  <tr key={`group-${i}`} style={{ backgroundColor: '#1f2e40', color: 'white' }}>
+                    <td colSpan={2 + rows.length} style={{ fontWeight: 700, padding: '8px', fontSize: '14px' }}>
+                      {row.groupTitle}
+                    </td>
+                  </tr>
+                )
+              }
+              return (
+                <tr key={row.flag}>
+                  <td>{row.stat}</td>
+                  <td style={{ fontWeight: 600 }}>{row._total}</td>
+                  {rows.map(playerRow => (
+                    <td key={playerRow.name}>{row[playerRow.name]}</td>
+                  ))}
+                </tr>
+              )
+            })}
             <tr style={{ borderTop: '2px solid #1f2e40', fontWeight: 700 }}>
               <td>{goalsRow.stat}</td>
               <td>{goalsRow._total}</td>
