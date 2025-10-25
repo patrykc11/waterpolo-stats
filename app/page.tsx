@@ -837,6 +837,7 @@ export default function Home() {
             timestamp: new Date().toISOString(),
             quarter: connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1),
             playerName: state.selected.name,
+            playerNumber: state.selected.number, // Add player number for display
             eventType: '',
             note: note,
             action: getActionLabel(def, attackMode) // Show proper action label
@@ -1612,7 +1613,11 @@ export default function Home() {
                   >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
-                        #{index + 1} {event.playerName}
+                        #{event.playerNumber || (() => {
+                          // Find player number from rosterActive for events from server
+                          const player = state.rosterActive.find(p => p.name === event.playerName)
+                          return player?.number || '?'
+                        })()} {event.playerName}
                       </div>
                       <div className="muted small" style={{ marginTop: '2px' }}>
                         Q{event.quarter} • {new Date(event.timestamp).toLocaleTimeString('pl-PL', { 
