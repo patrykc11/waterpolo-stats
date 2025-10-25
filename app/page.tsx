@@ -153,6 +153,8 @@ export default function Home() {
   })
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online')
   const [queuedRequests, setQueuedRequests] = useState(0)
+  const [localQuarter, setLocalQuarter] = useState<number>(1)
+  const [wasOffline, setWasOffline] = useState(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -200,10 +202,23 @@ export default function Home() {
       setQueuedRequests(queue.getQueueLength())
       
       // Check if request was queued (from network error)
-      if (error?.queued && endpoint.includes('/api/events')) {
-        showToast('Brak zasięgu - zdarzenie zapisane w kolejce')
-        // Return a mock success response for events
-        return { ok: true, queued: true }
+      if (error?.queued) {
+        if (endpoint.includes('/api/events')) {
+          showToast('Brak zasięgu - zdarzenie zapisane w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/stats/score')) {
+          showToast('Brak zasięgu - wynik zapisany w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/settings/quarter')) {
+          showToast('Brak zasięgu - zmiana kwarty zapisana w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/matches/end')) {
+          showToast('Brak zasięgu - zakończenie meczu zapisane w kolejce')
+          return { ok: true, queued: true }
+        } else {
+          showToast('Brak zasięgu - żądanie zapisane w kolejce')
+          return { ok: true, queued: true }
+        }
       }
       
       throw error
@@ -223,6 +238,11 @@ export default function Home() {
         user: data.user,
         rosterActive: data.rosterActive && data.rosterActive.length ? data.rosterActive : [],
       }))
+      
+      // Initialize local quarter from server
+      if (data.settings?.Quarter) {
+        setLocalQuarter(data.settings.Quarter)
+      }
       if (data.rosterActive?.length) {
         setState(prev => ({ ...prev, selected: data.rosterActive[0] }))
       }
@@ -259,8 +279,18 @@ export default function Home() {
     const queue = getOfflineQueue()
     
     const updateStatus = () => {
-      setConnectionStatus(queue.getConnectionStatus())
-      setQueuedRequests(queue.getQueueLength())
+      const status = queue.getConnectionStatus()
+      const queueLength = queue.getQueueLength()
+      
+      console.log(`[${new Date().toISOString()}] 🔄 UI UPDATE: Status=${status}, Queue=${queueLength}`)
+      
+      setConnectionStatus(status)
+      setQueuedRequests(queueLength)
+      
+      // Track if we were offline
+      if (status === 'offline') {
+        setWasOffline(true)
+      }
     }
     
     // Initial update
@@ -270,9 +300,18 @@ export default function Home() {
     const interval = setInterval(updateStatus, 2000)
     
     // Listen for queue processed events
-    const handleQueueProcessed = () => {
+    const handleQueueProcessed = async () => {
       updateStatus()
       showToast('Zsynchronizowano wszystkie żądania')
+      
+      // Refresh data after sync
+      await bootstrap()
+      
+      // Reset local quarter to server value after sync only if we were offline
+      if (wasOffline) {
+        setLocalQuarter(state.settings?.Quarter || 1)
+        setWasOffline(false)
+      }
     }
     
     window.addEventListener('queueProcessed', handleQueueProcessed)
@@ -289,7 +328,9 @@ export default function Home() {
       return showToast('Mecz jest zakończony - edycja zablokowana')
     }
     
-    const currentQuarter = state.settings?.Quarter || 1
+    // Use local quarter when offline, server quarter when online
+    const currentQuarter = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+    
     // Show popup to enter score for CURRENT quarter (the one we're leaving)
     setQuarterScorePopup({
       show: true,
@@ -300,6 +341,12 @@ export default function Home() {
     
     // Store the target quarter to switch to after saving score
     setTargetQuarter(q)
+    
+    // If offline, immediately update local quarter (without score popup)
+    if (connectionStatus === 'offline') {
+      setLocalQuarter(q)
+      showToast(`Przełączono na Q${q} (offline)`)
+    }
   }
 
   const setMatch = async (mId: string) => {
@@ -368,9 +415,12 @@ export default function Home() {
     if (!isMatchActive()) return showToast('Mecz jest zakończony - edycja zablokowana')
 
     const phase = def?.phase || 'positional'
+    // Use local quarter when offline, server quarter when online
+    const currentQuarter = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+    
     const base: any = {
       match_id: state.settings?.ActiveMatch,
-      quarter: state.settings?.Quarter,
+      quarter: currentQuarter,
       team: 'my',
       player_id: state.selected.player_id,
       player_name: state.selected.name,
@@ -737,10 +787,14 @@ export default function Home() {
           oppScore: Number(quarterScorePopup.oppScore || 0),
         }),
       })
-      setState(prev => ({
-        ...prev,
-        stats: { ...(prev.stats || {}), scores },
-      }))
+      
+      // If score was queued, don't update state yet
+      if (!scores?.queued) {
+        setState(prev => ({
+          ...prev,
+          stats: { ...(prev.stats || {}), scores },
+        }))
+      }
       
       // Now update the quarter to target quarter (the one we want to switch to)
       const targetQ = targetQuarter || quarterScorePopup.quarter
@@ -749,11 +803,24 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quarter: targetQ }),
       })
-      setState(prev => ({ ...prev, settings: s }))
+      
+      // If quarter change was queued, don't update state yet
+      if (!s?.queued) {
+        setState(prev => ({ ...prev, settings: s }))
+      } else {
+        // Update local quarter when offline
+        setLocalQuarter(targetQ)
+      }
       
       setQuarterScorePopup({ show: false, quarter: 1, myScore: '', oppScore: '' })
       setTargetQuarter(null)
-      showToast(`Zapisano wynik Q${quarterScorePopup.quarter} i przełączono na Q${targetQ}`)
+      
+      // Show appropriate toast
+      if (scores?.queued || s?.queued) {
+        showToast(`Wynik Q${quarterScorePopup.quarter} i zmiana na Q${targetQ} zapisane w kolejce`)
+      } else {
+        showToast(`Zapisano wynik Q${quarterScorePopup.quarter} i przełączono na Q${targetQ}`)
+      }
     } catch (e: any) {
       showToast(e.message || 'Błąd')
     } finally {
@@ -768,17 +835,22 @@ export default function Home() {
     setLoading(true)
     try {
       // Update match status to ended
-      await callApi('/api/matches/end', {
+      const result = await callApi('/api/matches/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId }),
       })
       
       setEndMatchPopup(false)
-      showToast('Mecz zakończony - edycja zablokowana')
       
-      // Refresh data to show updated status
-      bootstrap()
+      // If request was queued, show appropriate message
+      if (result?.queued) {
+        showToast('Brak zasięgu - zakończenie meczu zapisane w kolejce')
+      } else {
+        showToast('Mecz zakończony - edycja zablokowana')
+        // Refresh data to show updated status
+        bootstrap()
+      }
     } catch (e: any) {
       showToast(e.message || 'Błąd')
     } finally {
@@ -876,18 +948,21 @@ export default function Home() {
         {mode === 'score' && (
           <div className="navbar" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div className="tag">
-              Kwarta: <span>{state.settings?.Quarter || '—'}</span>
+              Kwarta: <span>{connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || '—')}</span>
             </div>
-            {[1, 2, 3, 4].map(q => (
-              <button
-                key={q}
-                className={'qbtn' + (state.settings?.Quarter === q ? ' selected' : '')}
-                onClick={(e) => setQuarter(q, e)}
-                disabled={!isMatchActive()}
-              >
-                Q{q}
-              </button>
-            ))}
+            {[1, 2, 3, 4].map(q => {
+              const currentQ = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+              return (
+                <button
+                  key={q}
+                  className={'qbtn' + (currentQ === q ? ' selected' : '')}
+                  onClick={(e) => setQuarter(q, e)}
+                  disabled={!isMatchActive()}
+                >
+                  Q{q}
+                </button>
+              )
+            })}
             {/* <button className="danger" onClick={(e) => undoLast(e)} disabled={!isMatchActive()}>
               Cofnij ostatnią akcję
             </button> */}
@@ -933,6 +1008,26 @@ export default function Home() {
             {connectionStatus === 'online' ? 'Online' : 'Offline'}
             {queuedRequests > 0 && ` (${queuedRequests})`}
           </span>
+          {queuedRequests > 0 && connectionStatus === 'online' && (
+            <button 
+              className="btn small" 
+              onClick={() => {
+                const queue = getOfflineQueue();
+                console.log('🔄 MANUAL SYNC: Triggering queue processing');
+                // Force process queue
+                (queue as any).processQueue();
+              }}
+              style={{ 
+                padding: '2px 6px', 
+                fontSize: '10px',
+                backgroundColor: '#4cc9f0',
+                borderColor: '#4cc9f0',
+                color: 'white'
+              }}
+            >
+              Sync
+            </button>
+          )}
         </div>
         
         <button onClick={() => setDrawerOpen(true)}>☰</button>

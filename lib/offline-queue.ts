@@ -65,8 +65,40 @@ class OfflineQueue {
   }
 
   private startHeartbeat() {
-    this.heartbeatTimer = setInterval(() => {
-      this.isOnline = navigator.onLine;
+    this.heartbeatTimer = setInterval(async () => {
+      const wasOnline = this.isOnline;
+
+      // Test actual connectivity with a lightweight request
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+        await fetch("/api/bootstrap", {
+          method: "HEAD",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        this.isOnline = true;
+
+        if (!wasOnline) {
+          const timestamp = new Date().toISOString();
+          console.log(`[${timestamp}] 🌐 HEARTBEAT: Connection restored`);
+        }
+
+        // Always try to process queue when online
+        if (this.isOnline && this.queue.length > 0) {
+          this.processQueue();
+        }
+      } catch (error) {
+        this.isOnline = false;
+
+        if (wasOnline) {
+          const timestamp = new Date().toISOString();
+          console.log(`[${timestamp}] 📴 HEARTBEAT: Connection lost`);
+        }
+      }
     }, HEARTBEAT_INTERVAL);
   }
 
@@ -100,6 +132,15 @@ class OfflineQueue {
       console.log(
         `[${timestamp}] ✅ SUCCESS: ${method} ${endpoint} (${response.status})`
       );
+
+      // Update online status on successful request
+      this.isOnline = true;
+
+      // Try to process any queued requests
+      if (this.queue.length > 0) {
+        this.processQueue();
+      }
+
       return response;
     } catch (error) {
       // If fetch fails, queue the request
@@ -107,6 +148,9 @@ class OfflineQueue {
         `[${timestamp}] ❌ OFFLINE: ${method} ${endpoint} - queuing for retry:`,
         error
       );
+
+      // Update offline status immediately when request fails
+      this.isOnline = false;
 
       const queuedRequest: QueuedRequest = {
         id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -129,11 +173,18 @@ class OfflineQueue {
   }
 
   private async processQueue() {
+    const timestamp = new Date().toISOString();
+    console.log(
+      `[${timestamp}] 🔍 PROCESS QUEUE: isOnline=${this.isOnline}, queueLength=${this.queue.length}`
+    );
+
     if (!this.isOnline || this.queue.length === 0) {
+      console.log(
+        `[${timestamp}] ⏸️ PROCESS QUEUE: Skipping - offline or empty queue`
+      );
       return;
     }
 
-    const timestamp = new Date().toISOString();
     const processed: string[] = [];
 
     console.log(
