@@ -33,6 +33,7 @@ type State = {
   user: any
   viewMatchId: string | null
   rosterActive: Player[]
+  recentEvents: any[]
 }
 
 const FLAG_LABELS: Record<string, string> = {
@@ -106,6 +107,7 @@ export default function Home() {
     user: null,
     viewMatchId: null,
     rosterActive: [],
+    recentEvents: [],
   })
   
   const [mode, setMode] = useState<'score' | 'stats' | 'admin' | 'players' | 'matches'>('score')
@@ -159,6 +161,60 @@ export default function Home() {
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 1400)
+  }, [])
+
+  const getActionLabel = useCallback((def: any, attackMode: string) => {
+    const act = def?.action || def
+    const isManUp = attackMode === 'man_up'
+    const phase = def?.phase || 'positional'
+
+    switch (act) {
+      case 'goal_play_pos': 
+        return phase === 'counter' ? 'G z kontrataku' : 'G z akcji (poz.)'
+      case 'goal_center_manup': 
+        return isManUp ? 'G z centra (przew.)' : 'G z centra (poz.)'
+      case 'goal_5m': return 'G z 5m (przew.)'
+      case 'goal_penalty': return 'G z karnego'
+      case 'assist': 
+        return isManUp ? 'Asysta (przew.)' : 'Asysta (poz.)'
+      case 'shot_saved': 
+        return isManUp ? 'Obrona GK (przew.)' : 'Obrona GK (poz.)'
+      case 'miss_turnover': 
+        return isManUp ? 'Niecelny rzut - strata (przew.)' : 'Niecelny rzut - strata (poz.)'
+      case 'miss_reset': 
+        return isManUp ? 'Niecelny rzut - 30s (przew.)' : 'Niecelny rzut - 30s (poz.)'
+      case 'bad_pass_turnover': 
+        return isManUp ? 'Złe podanie - strata (przew.)' : 'Złe podanie - strata (poz.)'
+      case 'bad_pass_no': 
+        return isManUp ? 'Złe podanie - bez straty (przew.)' : 'Złe podanie - bez straty (poz.)'
+      case 'turnover_1v1': 
+        return isManUp ? 'Strata 1:1 (przew.)' : 'Strata 1:1 (poz.)'
+      case 'shot_clock': 
+        return isManUp ? 'Koniec czasu (przew.)' : 'Koniec czasu (poz.)'
+      case 'excl_drawn_field': return 'Sprow. wykl. - w polu (poz.)'
+      case 'excl_drawn_center': return 'Sprow. wykl. - z centra (poz.)'
+      case 'penalty_drawn_field': return 'Sprow. karny - w polu (poz.)'
+      case 'penalty_drawn_center': return 'Sprow. karny - z centra (poz.)'
+      case 'no_return': 
+        return isManUp ? 'Brak powrotu (przew.)' : 'Brak powrotu (poz.)'
+      case 'excl_comm_field': 
+        return isManUp ? 'Wykl. spowod. - w polu (przew.)' : 'Wykl. spowod. - w polu (poz.)'
+      case 'excl_comm_center': 
+        return isManUp ? 'Wykl. spowod. - z centra (przew.)' : 'Wykl. spowod. - z centra (poz.)'
+      case 'pen_comm_field': 
+        return isManUp ? 'Karny spowod. - w polu (przew.)' : 'Karny spowod. - w polu (poz.)'
+      case 'pen_comm_center': 
+        return isManUp ? 'Karny spowod. - z centra (przew.)' : 'Karny spowod. - z centra (poz.)'
+      case 'shot_saved_def':
+        return isManUp ? 'Obrona GK def (przew.)' : 'Obrona GK def (poz.)'
+      case 'steal': 
+        return isManUp ? 'Przejęcie (przew.)' : 'Przejęcie (poz.)'
+      case 'block': 
+        return isManUp ? 'Blok (przew.)' : 'Blok (poz.)'
+      case 'no_block': 
+        return isManUp ? 'Brak bloku (przew.)' : 'Brak bloku (poz.)'
+      default: return 'Nieznana akcja'
+    }
   }, [])
 
   const isMatchActive = useCallback(() => {
@@ -270,6 +326,93 @@ export default function Home() {
     }
   }, [state.viewMatchId, state.settings, callApi, showToast])
 
+  const loadRecentEvents = useCallback(async () => {
+    const matchId = state.settings?.ActiveMatch
+    if (!matchId) return
+    
+    try {
+      const events = await callApi(`/api/events/${matchId}?limit=20`)
+      setState(prev => ({ ...prev, recentEvents: events }))
+      
+      // Save to localStorage for offline fallback
+      try {
+        localStorage.setItem(`events_${matchId}`, JSON.stringify(events))
+      } catch (e) {
+        console.warn('Failed to save events to localStorage:', e)
+      }
+    } catch (e: any) {
+      console.error('Error loading events:', e)
+      
+      // Try to load from localStorage as fallback
+      try {
+        const cachedEvents = localStorage.getItem(`events_${matchId}`)
+        if (cachedEvents) {
+          const events = JSON.parse(cachedEvents)
+          setState(prev => ({ ...prev, recentEvents: events }))
+          showToast('Ładowanie z pamięci lokalnej (offline)')
+          return
+        }
+      } catch (cacheError) {
+        console.warn('Failed to load events from localStorage:', cacheError)
+      }
+      
+      showToast(e.message || 'Błąd ładowania eventów')
+    }
+  }, [state.settings, callApi, showToast])
+
+  const deleteEvent = useCallback(async (eventId: string) => {
+    if (!isMatchActive()) {
+      return showToast('Mecz jest zakończony - edycja zablokowana')
+    }
+    
+    // Check if we're offline
+    if (connectionStatus === 'offline') {
+      // For offline mode, remove from local state, localStorage AND from offline queue
+      const matchId = state.settings?.ActiveMatch
+      if (matchId) {
+        // Remove from offline queue first
+        const queue = getOfflineQueue()
+        queue.removeFromQueue(eventId)
+        
+        // Remove event from local state immediately
+        setState(prev => ({
+          ...prev,
+          recentEvents: prev.recentEvents.filter(event => event.id !== eventId)
+        }))
+        
+        // Update localStorage
+        try {
+          const updatedEvents = state.recentEvents.filter(event => event.id !== eventId)
+          localStorage.setItem(`events_${matchId}`, JSON.stringify(updatedEvents))
+        } catch (cacheError) {
+          console.warn('Failed to update localStorage:', cacheError)
+        }
+        
+        showToast('Event usunięty (offline)')
+        return
+      }
+    }
+    
+    // Online mode - use API
+    try {
+      await callApi('/api/events/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      })
+      
+      showToast('Event usunięty')
+      // Refresh events list
+      await loadRecentEvents()
+      // Refresh stats if in stats mode
+      if (mode === 'stats' && state.stats) {
+        refreshStats()
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Błąd usuwania eventu')
+    }
+  }, [isMatchActive, connectionStatus, callApi, showToast, loadRecentEvents, mode, state.stats, refreshStats, state.settings, state.recentEvents])
+
   useEffect(() => {
     bootstrap()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -306,6 +449,11 @@ export default function Home() {
       
       // Refresh data after sync
       await bootstrap()
+      
+      // Refresh events list after sync
+      if (mode === 'score') {
+        await loadRecentEvents()
+      }
       
       // Reset local quarter to server value after sync only if we were offline
       if (wasOffline) {
@@ -481,6 +629,9 @@ export default function Home() {
     // Use local quarter when offline, server quarter when online
     const currentQuarter = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
     
+    // Generate local event ID for offline tracking
+    const localEventId = `temp_${Date.now()}`
+    
     const base: any = {
       match_id: state.settings?.ActiveMatch,
       quarter: currentQuarter,
@@ -645,21 +796,73 @@ export default function Home() {
     const payload = { ...base, ...flags }
 
     try {
-      const result = await callApi('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ events: [payload] }),
-      })
+      let result
+      
+      // If offline, use special method to track the request
+      if (connectionStatus === 'offline') {
+        const queue = getOfflineQueue()
+        try {
+          // Try to add to queue with local ID
+          queue.addToQueueWithLocalId('/api/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ events: [payload] }),
+          }, localEventId)
+          
+          result = { ok: true, queued: true }
+        } catch (error: any) {
+          // If queueing fails, throw error
+          throw error
+        }
+      } else {
+        // Online mode - use normal API
+        result = await callApi('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: [payload] }),
+        })
+      }
       
       setNote('')
       
       // If request was queued, don't refresh stats (will sync later)
       if (result?.queued) {
         // Don't show "Zapisano" toast - already shown by callApi
+        // But we can simulate adding the event to local state for immediate feedback
+        const matchId = state.settings?.ActiveMatch
+        if (matchId && state.selected) {
+          // Create a temporary event object for immediate display with proper action
+          const tempEvent = {
+            id: localEventId, // Use the same ID as in the queue
+            timestamp: new Date().toISOString(),
+            quarter: connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1),
+            playerName: state.selected.name,
+            eventType: '',
+            note: note,
+            action: getActionLabel(def, attackMode) // Show proper action label
+          }
+          
+          // Add to local state immediately
+          setState(prev => ({
+            ...prev,
+            recentEvents: [tempEvent, ...prev.recentEvents.slice(0, 19)] // Keep only 20 events
+          }))
+          
+          // Update localStorage
+          try {
+            const currentEvents = state.recentEvents
+            const updatedEvents = [tempEvent, ...currentEvents.slice(0, 19)]
+            localStorage.setItem(`events_${matchId}`, JSON.stringify(updatedEvents))
+          } catch (cacheError) {
+            console.warn('Failed to update localStorage:', cacheError)
+          }
+        }
         return
       }
       
       showToast('Zapisano')
+      // Refresh events list
+      await loadRecentEvents()
       // Refresh stats if in stats mode
       if (mode === 'stats' && state.stats) {
         refreshStats()
@@ -988,8 +1191,17 @@ export default function Home() {
       buildRosterForm()
     } else if (mode === 'stats') {
       refreshStats()
+    } else if (mode === 'score') {
+      loadRecentEvents()
     }
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load events when match changes
+  useEffect(() => {
+    if (state.settings?.ActiveMatch && mode === 'score') {
+      loadRecentEvents()
+    }
+  }, [state.settings?.ActiveMatch, mode, loadRecentEvents])
 
   return (
     <>
@@ -1362,6 +1574,82 @@ export default function Home() {
               />
             </div>
             </div>
+          </div>
+
+          {/* Recent Events - moved to bottom */}
+          <div className="panel" style={{ marginTop: '20px' }}>
+            <div className="subhead">Ostatnie eventy</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div className="muted small">
+                Ostatnie {state.recentEvents.length} eventów
+              </div>
+              <button 
+                className="btn small" 
+                onClick={loadRecentEvents}
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+              >
+                Odśwież
+              </button>
+            </div>
+            
+            {state.recentEvents.length === 0 ? (
+              <div className="muted small" style={{ padding: '12px', textAlign: 'center' }}>
+                Brak eventów dla tego meczu
+              </div>
+            ) : (
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {state.recentEvents.map((event, index) => (
+                  <div 
+                    key={event.id} 
+                    className="card" 
+                    style={{ 
+                      marginBottom: '8px', 
+                      padding: '12px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
+                        #{index + 1} {event.playerName}
+                      </div>
+                      <div className="muted small" style={{ marginTop: '2px' }}>
+                        Q{event.quarter} • {new Date(event.timestamp).toLocaleTimeString('pl-PL', { 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </div>
+                      <div style={{ fontSize: '13px', marginTop: '4px' }}>
+                        {event.action}
+                      </div>
+                      {event.note && (
+                        <div className="muted small" style={{ marginTop: '4px', fontStyle: 'italic' }}>
+                          "{event.note}"
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      className="btn danger small"
+                      onClick={() => {
+                        if (confirm('Czy na pewno chcesz usunąć ten event?')) {
+                          deleteEvent(event.id)
+                        }
+                      }}
+                      disabled={!isMatchActive()}
+                      style={{ 
+                        padding: '4px 8px', 
+                        fontSize: '11px',
+                        marginLeft: '8px'
+                      }}
+                    >
+                      Usuń
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

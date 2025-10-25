@@ -4,6 +4,7 @@ interface QueuedRequest {
   options: RequestInit;
   timestamp: number;
   retries: number;
+  localEventId?: string; // For tracking events added offline
 }
 
 const MAX_RETRIES = 3;
@@ -274,6 +275,59 @@ class OfflineQueue {
   clearQueue() {
     this.queue = [];
     this.saveQueue();
+  }
+
+  removeFromQueue(eventId: string) {
+    // Remove any queued requests that contain this eventId
+    const initialLength = this.queue.length;
+    this.queue = this.queue.filter((request) => {
+      // Check by localEventId first (most reliable)
+      if (request.localEventId === eventId) {
+        return false; // Remove this request
+      }
+
+      // Fallback: check by body content
+      try {
+        const body = JSON.parse((request.options.body as string) || "{}");
+        return body.eventId !== eventId && body.events?.[0]?.id !== eventId;
+      } catch {
+        return true; // Keep request if we can't parse body
+      }
+    });
+
+    if (this.queue.length < initialLength) {
+      this.saveQueue();
+      console.log(
+        `Removed ${
+          initialLength - this.queue.length
+        } queued requests for event ${eventId}`
+      );
+    }
+  }
+
+  addToQueueWithLocalId(
+    url: string,
+    options: RequestInit,
+    localEventId: string
+  ): string {
+    const requestId = `${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    const queuedRequest: QueuedRequest = {
+      id: requestId,
+      url,
+      options,
+      timestamp: Date.now(),
+      retries: 0,
+      localEventId, // Store the local event ID
+    };
+
+    this.queue.push(queuedRequest);
+    this.saveQueue();
+
+    console.log(`Added request to queue with localEventId: ${localEventId}`);
+    return requestId;
   }
 
   destroy() {
