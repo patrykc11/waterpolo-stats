@@ -1370,8 +1370,16 @@ export default function Home() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ quarter: targetQuarter }),
                       })
-                      setState(prev => ({ ...prev, settings: s }))
-                      showToast(`Przełączono na Q${targetQuarter}`)
+                      
+                      // If request was queued, don't update state yet
+                      if (!s?.queued) {
+                        setState(prev => ({ ...prev, settings: s }))
+                        showToast(`Przełączono na Q${targetQuarter}`)
+                      } else {
+                        // Update local quarter when offline
+                        setLocalQuarter(targetQuarter)
+                        showToast(`Przełączono na Q${targetQuarter} (offline)`)
+                      }
                     } catch (e: any) {
                       showToast(e.message || 'Błąd')
                     }
