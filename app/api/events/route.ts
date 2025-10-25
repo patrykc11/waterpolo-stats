@@ -5,6 +5,9 @@ import logger from "@/lib/logger";
 export async function POST(request: Request) {
   try {
     const { events } = await request.json();
+    // logger.info("POST /api/events - Received events", {
+    //   count: events?.length || 0,
+    // });
 
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
 
@@ -82,7 +85,11 @@ export async function POST(request: Request) {
 
     await prisma.event.createMany({ data: eventsData });
 
-    logger.info("Events saved successfully", { count: eventsData.length });
+    logger.info("POST /api/events - Events saved successfully", {
+      count: eventsData.length,
+      matchId: settings?.activeMatch,
+      quarter: settings?.quarter,
+    });
     return NextResponse.json({ ok: true, count: eventsData.length });
   } catch (error) {
     logger.error("Events error:", {

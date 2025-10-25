@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import logger from "@/lib/logger";
 
 export async function POST(request: Request) {
   try {
     const { matchId, quarter, myScore, oppScore } = await request.json();
+    logger.info("POST /api/stats/score - Saving score", {
+      matchId,
+      quarter,
+      myScore,
+      oppScore,
+    });
 
     const updateData: any = {};
 
@@ -29,9 +36,19 @@ export async function POST(request: Request) {
       final: { my: match.finalMy, opp: match.finalOpp },
     };
 
+    logger.info("POST /api/stats/score - Score saved successfully", {
+      matchId,
+      quarter,
+      scores,
+    });
+
     return NextResponse.json(scores);
   } catch (error) {
-    console.error("Score error:", error);
+    logger.error("POST /api/stats/score - Failed to save score", {
+      error,
+      matchId,
+      quarter,
+    });
     return NextResponse.json(
       { error: "Failed to save score" },
       { status: 500 }

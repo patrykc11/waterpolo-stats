@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { getOfflineQueue } from '@/lib/offline-queue'
 
 type Player = {
   player_id: string
@@ -150,6 +151,10 @@ export default function Home() {
     place: '',
     ageCategory: 'Seniorzy',
   })
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online')
+  const [queuedRequests, setQueuedRequests] = useState(0)
+  const [localQuarter, setLocalQuarter] = useState<number>(1)
+  const [wasOffline, setWasOffline] = useState(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -169,20 +174,56 @@ export default function Home() {
   }, [])
 
   const callApi = useCallback(async (endpoint: string, options?: RequestInit) => {
-    const res = await fetch(endpoint, {
-      ...options,
-      cache: 'no-store', // Disable caching
-      headers: {
-        'Cache-Control': 'no-cache',
-        ...options?.headers
+    const queue = getOfflineQueue()
+    
+    try {
+      const res = await queue.fetch(endpoint, {
+        ...options,
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          ...options?.headers
+        }
+      })
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(err.error || 'API Error')
       }
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(err.error || 'API Error')
+      
+      // Success - update status
+      setConnectionStatus(queue.getConnectionStatus())
+      setQueuedRequests(queue.getQueueLength())
+      
+      return res.json()
+    } catch (error: any) {
+      // Update connection status and queue length
+      setConnectionStatus(queue.getConnectionStatus())
+      setQueuedRequests(queue.getQueueLength())
+      
+      // Check if request was queued (from network error)
+      if (error?.queued) {
+        if (endpoint.includes('/api/events')) {
+          showToast('Brak zasięgu - zdarzenie zapisane w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/stats/score')) {
+          showToast('Brak zasięgu - wynik zapisany w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/settings/quarter')) {
+          showToast('Brak zasięgu - zmiana kwarty zapisana w kolejce')
+          return { ok: true, queued: true }
+        } else if (endpoint.includes('/api/matches/end')) {
+          showToast('Brak zasięgu - zakończenie meczu zapisane w kolejce')
+          return { ok: true, queued: true }
+        } else {
+          showToast('Brak zasięgu - żądanie zapisane w kolejce')
+          return { ok: true, queued: true }
+        }
+      }
+      
+      throw error
     }
-    return res.json()
-  }, [])
+  }, [showToast])
 
   const bootstrap = useCallback(async () => {
     setLoading(true)
@@ -197,6 +238,11 @@ export default function Home() {
         user: data.user,
         rosterActive: data.rosterActive && data.rosterActive.length ? data.rosterActive : [],
       }))
+      
+      // Initialize local quarter from server
+      if (data.settings?.Quarter) {
+        setLocalQuarter(data.settings.Quarter)
+      }
       if (data.rosterActive?.length) {
         setState(prev => ({ ...prev, selected: data.rosterActive[0] }))
       }
@@ -228,13 +274,126 @@ export default function Home() {
     bootstrap()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Monitor connection status and queue
+  useEffect(() => {
+    const queue = getOfflineQueue()
+    
+    const updateStatus = () => {
+      const status = queue.getConnectionStatus()
+      const queueLength = queue.getQueueLength()
+      
+      console.log(`[${new Date().toISOString()}] 🔄 UI UPDATE: Status=${status}, Queue=${queueLength}`)
+      
+      setConnectionStatus(status)
+      setQueuedRequests(queueLength)
+      
+      // Track if we were offline
+      if (status === 'offline') {
+        setWasOffline(true)
+      }
+    }
+    
+    // Initial update
+    updateStatus()
+    
+    // Update every 2 seconds
+    const interval = setInterval(updateStatus, 2000)
+    
+    // Listen for queue processed events
+    const handleQueueProcessed = async () => {
+      updateStatus()
+      showToast('Zsynchronizowano wszystkie żądania')
+      
+      // Refresh data after sync
+      await bootstrap()
+      
+      // Reset local quarter to server value after sync only if we were offline
+      if (wasOffline) {
+        setLocalQuarter(state.settings?.Quarter || 1)
+        setWasOffline(false)
+      }
+    }
+    
+    window.addEventListener('queueProcessed', handleQueueProcessed)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('queueProcessed', handleQueueProcessed)
+    }
+  }, [showToast])
+
+  // Warning before page refresh when offline
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline) {
+        const message = 'Aplikacja jest w trybie offline. Odświeżenie strony może spowodować utratę danych. Czy na pewno chcesz odświeżyć?'
+        
+        // Standard way to show browser warning
+        event.preventDefault()
+        event.returnValue = message
+        
+        // For older browsers
+        return message
+      }
+    }
+    
+    // Safari-specific handling for iOS/iPad
+    const handlePageHide = (event: PageTransitionEvent) => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline && !event.persisted) {
+        // Safari on iOS doesn't always respect beforeunload
+        // This provides additional protection
+        event.preventDefault()
+        return false
+      }
+    }
+    
+    // Handle Safari-specific events
+    const handleVisibilityChange = () => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline && document.hidden) {
+        // Show warning when tab becomes hidden (Safari behavior)
+        alert('⚠️ Aplikacja jest w trybie offline. Nie zamykaj karty!')
+      }
+    }
+    
+    // Detect if we're on Safari/iOS
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    // Add Safari/iOS specific listeners
+    if (isSafari || isIOS) {
+      window.addEventListener('pagehide', handlePageHide)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (isSafari || isIOS) {
+        window.removeEventListener('pagehide', handlePageHide)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }
+  }, [])
+
   const setQuarter = async (q: number, event?: React.MouseEvent<HTMLButtonElement>) => {
     if (event) addButtonPressEffect(event.currentTarget)
     if (!isMatchActive()) {
       return showToast('Mecz jest zakończony - edycja zablokowana')
     }
     
-    const currentQuarter = state.settings?.Quarter || 1
+    // Use local quarter when offline, server quarter when online
+    const currentQuarter = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+    
     // Show popup to enter score for CURRENT quarter (the one we're leaving)
     setQuarterScorePopup({
       show: true,
@@ -245,6 +404,12 @@ export default function Home() {
     
     // Store the target quarter to switch to after saving score
     setTargetQuarter(q)
+    
+    // If offline, immediately update local quarter (without score popup)
+    if (connectionStatus === 'offline') {
+      setLocalQuarter(q)
+      showToast(`Przełączono na Q${q} (offline)`)
+    }
   }
 
   const setMatch = async (mId: string) => {
@@ -313,9 +478,12 @@ export default function Home() {
     if (!isMatchActive()) return showToast('Mecz jest zakończony - edycja zablokowana')
 
     const phase = def?.phase || 'positional'
+    // Use local quarter when offline, server quarter when online
+    const currentQuarter = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+    
     const base: any = {
       match_id: state.settings?.ActiveMatch,
-      quarter: state.settings?.Quarter,
+      quarter: currentQuarter,
       team: 'my',
       player_id: state.selected.player_id,
       player_name: state.selected.name,
@@ -477,12 +645,20 @@ export default function Home() {
     const payload = { ...base, ...flags }
 
     try {
-      await callApi('/api/events', {
+      const result = await callApi('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ events: [payload] }),
       })
+      
       setNote('')
+      
+      // If request was queued, don't refresh stats (will sync later)
+      if (result?.queued) {
+        // Don't show "Zapisano" toast - already shown by callApi
+        return
+      }
+      
       showToast('Zapisano')
       // Refresh stats if in stats mode
       if (mode === 'stats' && state.stats) {
@@ -674,10 +850,14 @@ export default function Home() {
           oppScore: Number(quarterScorePopup.oppScore || 0),
         }),
       })
-      setState(prev => ({
-        ...prev,
-        stats: { ...(prev.stats || {}), scores },
-      }))
+      
+      // If score was queued, don't update state yet
+      if (!scores?.queued) {
+        setState(prev => ({
+          ...prev,
+          stats: { ...(prev.stats || {}), scores },
+        }))
+      }
       
       // Now update the quarter to target quarter (the one we want to switch to)
       const targetQ = targetQuarter || quarterScorePopup.quarter
@@ -686,11 +866,24 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quarter: targetQ }),
       })
-      setState(prev => ({ ...prev, settings: s }))
+      
+      // If quarter change was queued, don't update state yet
+      if (!s?.queued) {
+        setState(prev => ({ ...prev, settings: s }))
+      } else {
+        // Update local quarter when offline
+        setLocalQuarter(targetQ)
+      }
       
       setQuarterScorePopup({ show: false, quarter: 1, myScore: '', oppScore: '' })
       setTargetQuarter(null)
-      showToast(`Zapisano wynik Q${quarterScorePopup.quarter} i przełączono na Q${targetQ}`)
+      
+      // Show appropriate toast
+      if (scores?.queued || s?.queued) {
+        showToast(`Wynik Q${quarterScorePopup.quarter} i zmiana na Q${targetQ} zapisane w kolejce`)
+      } else {
+        showToast(`Zapisano wynik Q${quarterScorePopup.quarter} i przełączono na Q${targetQ}`)
+      }
     } catch (e: any) {
       showToast(e.message || 'Błąd')
     } finally {
@@ -705,17 +898,22 @@ export default function Home() {
     setLoading(true)
     try {
       // Update match status to ended
-      await callApi('/api/matches/end', {
+      const result = await callApi('/api/matches/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId }),
       })
       
       setEndMatchPopup(false)
-      showToast('Mecz zakończony - edycja zablokowana')
       
-      // Refresh data to show updated status
-      bootstrap()
+      // If request was queued, show appropriate message
+      if (result?.queued) {
+        showToast('Brak zasięgu - zakończenie meczu zapisane w kolejce')
+      } else {
+        showToast('Mecz zakończony - edycja zablokowana')
+        // Refresh data to show updated status
+        bootstrap()
+      }
     } catch (e: any) {
       showToast(e.message || 'Błąd')
     } finally {
@@ -813,18 +1011,21 @@ export default function Home() {
         {mode === 'score' && (
           <div className="navbar" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div className="tag">
-              Kwarta: <span>{state.settings?.Quarter || '—'}</span>
+              Kwarta: <span>{connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || '—')}</span>
             </div>
-            {[1, 2, 3, 4].map(q => (
-              <button
-                key={q}
-                className={'qbtn' + (state.settings?.Quarter === q ? ' selected' : '')}
-                onClick={(e) => setQuarter(q, e)}
-                disabled={!isMatchActive()}
-              >
-                Q{q}
-              </button>
-            ))}
+            {[1, 2, 3, 4].map(q => {
+              const currentQ = connectionStatus === 'offline' ? localQuarter : (state.settings?.Quarter || 1)
+              return (
+                <button
+                  key={q}
+                  className={'qbtn' + (currentQ === q ? ' selected' : '')}
+                  onClick={(e) => setQuarter(q, e)}
+                  disabled={!isMatchActive()}
+                >
+                  Q{q}
+                </button>
+              )
+            })}
             {/* <button className="danger" onClick={(e) => undoLast(e)} disabled={!isMatchActive()}>
               Cofnij ostatnią akcję
             </button> */}
@@ -849,6 +1050,67 @@ export default function Home() {
         )}
 
         <div style={{ marginLeft: 'auto' }} />
+        
+        {/* Connection Status Indicator */}
+        <div className="tag" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px',
+          backgroundColor: connectionStatus === 'online' ? '#0d290d' : '#2d1b1b',
+          borderColor: connectionStatus === 'online' ? '#51cf66' : '#ff6b6b'
+        }}>
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: connectionStatus === 'online' ? '#51cf66' : '#ff6b6b',
+            boxShadow: connectionStatus === 'online' ? '0 0 8px rgba(81, 207, 102, 0.6)' : '0 0 8px rgba(255, 107, 107, 0.6)',
+            animation: connectionStatus === 'online' ? 'pulse 2s ease-in-out infinite' : 'none'
+          }} />
+          <span className="small">
+            {connectionStatus === 'online' ? 'Online' : 'Offline'}
+            {queuedRequests > 0 && ` (${queuedRequests})`}
+          </span>
+          {queuedRequests > 0 && connectionStatus === 'online' && (
+            <button 
+              className="btn small" 
+              onClick={() => {
+                const queue = getOfflineQueue();
+                console.log('🔄 MANUAL SYNC: Triggering queue processing');
+                // Force process queue
+                (queue as any).processQueue();
+              }}
+              style={{ 
+                padding: '2px 6px', 
+                fontSize: '10px',
+                backgroundColor: '#4cc9f0',
+                borderColor: '#4cc9f0',
+                color: 'white'
+              }}
+            >
+              Sync
+            </button>
+          )}
+        </div>
+        
+        {/* Offline Warning */}
+        {connectionStatus === 'offline' && (
+          <div className="tag" style={{
+            backgroundColor: '#2d1b00',
+            borderColor: '#d4a574',
+            color: '#d4a574',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}>
+            <span style={{ fontSize: '14px' }}>⚠️</span>
+            <span className="small">
+              Offline - Nie odświeżaj strony!{queuedRequests > 0 && ` (${queuedRequests} żądań w kolejce)`}
+            </span>
+          </div>
+        )}
+        
         <button onClick={() => setDrawerOpen(true)}>☰</button>
       </header>
 
@@ -1189,8 +1451,16 @@ export default function Home() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ quarter: targetQuarter }),
                       })
-                      setState(prev => ({ ...prev, settings: s }))
-                      showToast(`Przełączono na Q${targetQuarter}`)
+                      
+                      // If request was queued, don't update state yet
+                      if (!s?.queued) {
+                        setState(prev => ({ ...prev, settings: s }))
+                        showToast(`Przełączono na Q${targetQuarter}`)
+                      } else {
+                        // Update local quarter when offline
+                        setLocalQuarter(targetQuarter)
+                        showToast(`Przełączono na Q${targetQuarter} (offline)`)
+                      }
                     } catch (e: any) {
                       showToast(e.message || 'Błąd')
                     }

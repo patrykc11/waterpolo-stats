@@ -714,6 +714,15 @@ button:disabled,
   }
 }
 
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 /* Main layout - horizontal */
 .main-layout {
   display: flex;
