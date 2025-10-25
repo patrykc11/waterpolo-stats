@@ -3,8 +3,15 @@ import { prisma } from "@/lib/prisma";
 import logger from "@/lib/logger";
 
 export async function POST(request: Request) {
+  let matchId: string | undefined;
+  let quarter: string | undefined;
+
   try {
-    const { matchId, quarter, myScore, oppScore } = await request.json();
+    const body = await request.json();
+    matchId = body.matchId;
+    quarter = body.quarter;
+    const { myScore, oppScore } = body;
+
     logger.info("POST /api/stats/score - Saving score", {
       matchId,
       quarter,

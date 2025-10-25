@@ -321,3 +321,5 @@ Prywatny projekt - wszystkie prawa zastrzeżone.
 npx prisma migrate dev --name init
 npx prisma db seed
 npm run dev
+
+docker exec waterpolo-db psql -U waterpolo -d waterpolo_stats -c "INSERT INTO settings (id, \"activeMatch\", quarter, \"editorPIN\", \"createdAt\", \"updatedAt\") VALUES (1, 'match_1760748892676', 1, '', NOW(), NOW()) ON CONFLICT (id) DO UPDATE SET \"activeMatch\" = EXCLUDED.\"activeMatch\", \"updatedAt\" = NOW();"
