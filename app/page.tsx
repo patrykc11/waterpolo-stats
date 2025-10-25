@@ -322,6 +322,69 @@ export default function Home() {
     }
   }, [showToast])
 
+  // Warning before page refresh when offline
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline) {
+        const message = 'Aplikacja jest w trybie offline. Odświeżenie strony może spowodować utratę danych. Czy na pewno chcesz odświeżyć?'
+        
+        // Standard way to show browser warning
+        event.preventDefault()
+        event.returnValue = message
+        
+        // For older browsers
+        return message
+      }
+    }
+    
+    // Safari-specific handling for iOS/iPad
+    const handlePageHide = (event: PageTransitionEvent) => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline && !event.persisted) {
+        // Safari on iOS doesn't always respect beforeunload
+        // This provides additional protection
+        event.preventDefault()
+        return false
+      }
+    }
+    
+    // Handle Safari-specific events
+    const handleVisibilityChange = () => {
+      const queue = getOfflineQueue()
+      const isOffline = queue.getConnectionStatus() === 'offline'
+      
+      if (isOffline && document.hidden) {
+        // Show warning when tab becomes hidden (Safari behavior)
+        alert('⚠️ Aplikacja jest w trybie offline. Nie zamykaj karty!')
+      }
+    }
+    
+    // Detect if we're on Safari/iOS
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    // Add Safari/iOS specific listeners
+    if (isSafari || isIOS) {
+      window.addEventListener('pagehide', handlePageHide)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (isSafari || isIOS) {
+        window.removeEventListener('pagehide', handlePageHide)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }
+  }, [])
+
   const setQuarter = async (q: number, event?: React.MouseEvent<HTMLButtonElement>) => {
     if (event) addButtonPressEffect(event.currentTarget)
     if (!isMatchActive()) {
@@ -1029,6 +1092,24 @@ export default function Home() {
             </button>
           )}
         </div>
+        
+        {/* Offline Warning */}
+        {connectionStatus === 'offline' && (
+          <div className="tag" style={{
+            backgroundColor: '#2d1b00',
+            borderColor: '#d4a574',
+            color: '#d4a574',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}>
+            <span style={{ fontSize: '14px' }}>⚠️</span>
+            <span className="small">
+              Offline - Nie odświeżaj strony!{queuedRequests > 0 && ` (${queuedRequests} żądań w kolejce)`}
+            </span>
+          </div>
+        )}
         
         <button onClick={() => setDrawerOpen(true)}>☰</button>
       </header>
