@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { getOfflineQueue } from '@/lib/offline-queue'
 
 type Player = {
   player_id: string
@@ -150,6 +151,8 @@ export default function Home() {
     place: '',
     ageCategory: 'Seniorzy',
   })
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online')
+  const [queuedRequests, setQueuedRequests] = useState(0)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -169,20 +172,43 @@ export default function Home() {
   }, [])
 
   const callApi = useCallback(async (endpoint: string, options?: RequestInit) => {
-    const res = await fetch(endpoint, {
-      ...options,
-      cache: 'no-store', // Disable caching
-      headers: {
-        'Cache-Control': 'no-cache',
-        ...options?.headers
+    const queue = getOfflineQueue()
+    
+    try {
+      const res = await queue.fetch(endpoint, {
+        ...options,
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          ...options?.headers
+        }
+      })
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(err.error || 'API Error')
       }
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(err.error || 'API Error')
+      
+      // Success - update status
+      setConnectionStatus(queue.getConnectionStatus())
+      setQueuedRequests(queue.getQueueLength())
+      
+      return res.json()
+    } catch (error: any) {
+      // Update connection status and queue length
+      setConnectionStatus(queue.getConnectionStatus())
+      setQueuedRequests(queue.getQueueLength())
+      
+      // Check if request was queued (from network error)
+      if (error?.queued && endpoint.includes('/api/events')) {
+        showToast('Brak zasięgu - zdarzenie zapisane w kolejce')
+        // Return a mock success response for events
+        return { ok: true, queued: true }
+      }
+      
+      throw error
     }
-    return res.json()
-  }, [])
+  }, [showToast])
 
   const bootstrap = useCallback(async () => {
     setLoading(true)
@@ -227,6 +253,35 @@ export default function Home() {
   useEffect(() => {
     bootstrap()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Monitor connection status and queue
+  useEffect(() => {
+    const queue = getOfflineQueue()
+    
+    const updateStatus = () => {
+      setConnectionStatus(queue.getConnectionStatus())
+      setQueuedRequests(queue.getQueueLength())
+    }
+    
+    // Initial update
+    updateStatus()
+    
+    // Update every 2 seconds
+    const interval = setInterval(updateStatus, 2000)
+    
+    // Listen for queue processed events
+    const handleQueueProcessed = () => {
+      updateStatus()
+      showToast('Zsynchronizowano wszystkie żądania')
+    }
+    
+    window.addEventListener('queueProcessed', handleQueueProcessed)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('queueProcessed', handleQueueProcessed)
+    }
+  }, [showToast])
 
   const setQuarter = async (q: number, event?: React.MouseEvent<HTMLButtonElement>) => {
     if (event) addButtonPressEffect(event.currentTarget)
@@ -477,12 +532,20 @@ export default function Home() {
     const payload = { ...base, ...flags }
 
     try {
-      await callApi('/api/events', {
+      const result = await callApi('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ events: [payload] }),
       })
+      
       setNote('')
+      
+      // If request was queued, don't refresh stats (will sync later)
+      if (result?.queued) {
+        // Don't show "Zapisano" toast - already shown by callApi
+        return
+      }
+      
       showToast('Zapisano')
       // Refresh stats if in stats mode
       if (mode === 'stats' && state.stats) {
@@ -849,6 +912,29 @@ export default function Home() {
         )}
 
         <div style={{ marginLeft: 'auto' }} />
+        
+        {/* Connection Status Indicator */}
+        <div className="tag" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px',
+          backgroundColor: connectionStatus === 'online' ? '#0d290d' : '#2d1b1b',
+          borderColor: connectionStatus === 'online' ? '#51cf66' : '#ff6b6b'
+        }}>
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: connectionStatus === 'online' ? '#51cf66' : '#ff6b6b',
+            boxShadow: connectionStatus === 'online' ? '0 0 8px rgba(81, 207, 102, 0.6)' : '0 0 8px rgba(255, 107, 107, 0.6)',
+            animation: connectionStatus === 'online' ? 'pulse 2s ease-in-out infinite' : 'none'
+          }} />
+          <span className="small">
+            {connectionStatus === 'online' ? 'Online' : 'Offline'}
+            {queuedRequests > 0 && ` (${queuedRequests})`}
+          </span>
+        </div>
+        
         <button onClick={() => setDrawerOpen(true)}>☰</button>
       </header>
 
