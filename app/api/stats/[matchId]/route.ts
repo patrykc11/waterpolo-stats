@@ -31,12 +31,26 @@ export async function GET(
       where: { matchId },
     });
 
+    // Scores in database are cumulative (score at end of each quarter)
+    // Calculate per-quarter differences for display
+    const q1My = match?.q1My || 0;
+    const q1Opp = match?.q1Opp || 0;
+    const q2My = match?.q2My || 0;
+    const q2Opp = match?.q2Opp || 0;
+    const q3My = match?.q3My || 0;
+    const q3Opp = match?.q3Opp || 0;
+    const q4My = match?.q4My || 0;
+    const q4Opp = match?.q4Opp || 0;
+
     const scores = {
-      "1": { my: match?.q1My || 0, opp: match?.q1Opp || 0 },
-      "2": { my: match?.q2My || 0, opp: match?.q2Opp || 0 },
-      "3": { my: match?.q3My || 0, opp: match?.q3Opp || 0 },
-      "4": { my: match?.q4My || 0, opp: match?.q4Opp || 0 },
-      final: { my: match?.finalMy || 0, opp: match?.finalOpp || 0 },
+      "1": { my: q1My, opp: q1Opp }, // Q1 is already per-quarter
+      "2": { my: q2My - q1My, opp: q2Opp - q1Opp }, // Difference from Q1
+      "3": { my: q3My - q2My, opp: q3Opp - q2Opp }, // Difference from Q2
+      "4": { my: q4My - q3My, opp: q4Opp - q3Opp }, // Difference from Q3
+      final: { 
+        my: match?.finalMy || q4My, 
+        opp: match?.finalOpp || q4Opp 
+      }, // Final score (use q4 if final not set)
     };
 
     // Compute stats - 44 fields matching assistant buttons

@@ -1890,10 +1890,8 @@ function StatsPanel({ state, statsQuarter, setStatsQuarter, scoreQuarter, setSco
   const playersById = Object.fromEntries(stats.players.map((p: any) => [p.player_id, p]))
   const s = stats.scores
   
-  // Calculate final score from quarters if not set
-  const finalScore = s.final.my > 0 || s.final.opp > 0 
-    ? `${s.final.my}:${s.final.opp}` 
-    : `${s['1'].my + s['2'].my + s['3'].my + s['4'].my}:${s['1'].opp + s['2'].opp + s['3'].opp + s['4'].opp}`
+  // Scores are now per-quarter (differences), final is the actual final score
+  const finalScore = `${s.final.my}:${s.final.opp}`
   
   const scoreText = `Q1 ${s['1'].my}:${s['1'].opp} • Q2 ${s['2'].my}:${s['2'].opp} • Q3 ${s['3'].my}:${s['3'].opp} • Q4 ${s['4'].my}:${s['4'].opp} • F ${finalScore}`
 
